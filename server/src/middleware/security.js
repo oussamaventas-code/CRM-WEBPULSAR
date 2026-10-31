@@ -12,6 +12,7 @@ export const securityHeaders = helmet({
       fontSrc: ["'self'", 'data:'],
       connectSrc: ["'self'"],
       objectSrc: ["'none'"],
+      frameSrc: ["'self'", 'https:'],
       frameAncestors: ["'none'"],
       baseUri: ["'self'"],
       formAction: ["'self'"],

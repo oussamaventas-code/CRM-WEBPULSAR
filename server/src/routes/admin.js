@@ -186,6 +186,7 @@ const settingSchemas = {
     project_status_change: f.bool(),
     task_reminders: f.bool(),
     recurring_generation: f.bool(),
+    email_notifications: f.bool(),
     integration_sync_hours: f.int(0, 168),
   }),
 };

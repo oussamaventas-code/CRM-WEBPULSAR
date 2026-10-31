@@ -277,6 +277,7 @@ const automationFields = [
   { name: 'alert_to_incident', type: 'switch', label: 'Incidencias', switchLabel: 'Crear incidencia automáticamente desde alertas críticas', span: 2 },
   { name: 'project_status_change', type: 'switch', label: 'Proyectos', switchLabel: 'Notificar cuando un proyecto cambie de estado', span: 2 },
   { name: 'task_reminders', type: 'switch', label: 'Tareas', switchLabel: 'Recordar tareas próximas o vencidas a su responsable', span: 2 },
+  { name: 'email_notifications', type: 'switch', label: 'Correo', switchLabel: 'Enviar también cada aviso por email a los socios (requiere correo saliente)', span: 2 },
   { name: 'integration_sync_hours', label: 'Sincronizar integraciones cada (horas, 0 = manual)', type: 'number' },
 ];
 
@@ -482,7 +483,7 @@ export default function SettingsPage() {
           {tab === 'monitorizacion' && (
             <div className="grid gap-6 xl:grid-cols-2">
               <SettingsForm settingKey="monitoring" title="Umbrales de monitorización" icon={HeartPulse} fields={monitoringFields} data={settings.monitoring} />
-              <SettingsForm settingKey="automations" title="Automatizaciones y avisos" icon={Bell} fields={automationFields} data={settings.automations} notice={<Notice tone="brand">Los avisos aparecen como notificaciones dentro del CRM. El envío por email se activará con el correo saliente configurado.</Notice>} />
+              <SettingsForm settingKey="automations" title="Automatizaciones y avisos" icon={Bell} fields={automationFields} data={settings.automations} notice={<Notice tone="brand">Los avisos aparecen en el CRM y en el móvil (si has activado las notificaciones). Con el correo saliente configurado también se envían por email.</Notice>} />
             </div>
           )}
           {tab === 'cuenta' && <AccountTab />}

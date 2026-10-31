@@ -1,5 +1,6 @@
 import { db } from '../db/index.js';
 import { sendPush } from '../services/push.js';
+import { emailNotification } from '../services/notifyEmail.js';
 
 /**
  * Crea una notificación interna para cada usuario activo (o los indicados).
@@ -20,6 +21,9 @@ export function notify({ userIds, excludeUserId, type, title, body = null, sever
     created += Number(res.changes);
   }
   // Push al móvil solo para avisos nuevos (los repetidos por dedupe_key no vuelven a sonar).
-  if (notified.length) sendPush(notified, { title, body: body ?? '', link: link ?? '/', tag: dedupeKey ?? type }).catch(() => {});
+  if (notified.length) {
+    sendPush(notified, { title, body: body ?? '', link: link ?? '/', tag: dedupeKey ?? type }).catch(() => {});
+    emailNotification(notified, { title, body: body ?? '', link: link ?? '/' }).catch(() => {});
+  }
   return created;
 }

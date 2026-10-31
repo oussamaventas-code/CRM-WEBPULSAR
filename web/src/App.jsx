@@ -14,7 +14,7 @@ const ClientDetail = lazy(() => import('./pages/clients/ClientDetail.jsx'));
 const ProjectsPage = lazy(() => import('./pages/projects/ProjectsPage.jsx'));
 const ProjectDetail = lazy(() => import('./pages/projects/ProjectDetail.jsx'));
 const SalesPage = lazy(() => import('./pages/sales/SalesPage.jsx'));
-const DevelopmentPage = lazy(() => import('./pages/development/DevelopmentPage.jsx'));
+const WorkPage = lazy(() => import('./pages/work/WorkPage.jsx'));
 const InfrastructurePage = lazy(() => import('./pages/infrastructure/InfrastructurePage.jsx'));
 const ServerDetail = lazy(() => import('./pages/infrastructure/ServerDetail.jsx'));
 const DomainDetail = lazy(() => import('./pages/infrastructure/DomainDetail.jsx'));
@@ -88,7 +88,8 @@ export default function App() {
               <Route path="clientes" element={page(<ClientsPage />)} />
               <Route path="clientes/:id" element={page(<ClientDetail />)} />
               <Route path="ventas" element={page(<SalesPage />)} />
-              <Route path="desarrollo" element={page(<DevelopmentPage />)} />
+              <Route path="trabajo" element={page(<WorkPage />)} />
+              <Route path="desarrollo" element={<Navigate to="/trabajo" replace />} />
               <Route path="proyectos" element={page(<ProjectsPage />)} />
               <Route path="proyectos/:id" element={page(<ProjectDetail />)} />
               <Route path="infraestructura" element={page(<InfrastructurePage />)} />

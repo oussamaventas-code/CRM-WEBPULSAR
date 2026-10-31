@@ -55,7 +55,7 @@ Abre http://localhost:5173. La API escucha en `127.0.0.1:4000` y Vite la expone 
 | Overview | 8 KPIs reales con comparación cuando hay datos previos, gráfico financiero (7/30/90 días, 12 meses), INFRASTRUCTURE OVERVIEW, actividad reciente, acciones rápidas |
 | Clientes | Tabla con filtros (activos, pendientes, deuda, proyectos abiertos, archivados), búsqueda en tiempo real, expediente con 8 pestañas, contactos, comunicaciones, archivado y eliminación protegida (nunca borra datos financieros) |
 | Ventas | Pipeline Kanban de leads y oportunidades (6 etapas), previsión ponderada, tasa de cierre y ciclo medio *(nuevo)* |
-| Desarrollo | Últimos commits de GitHub por proyecto, autor y preview en vivo *(nuevo)* |
+| Trabajo | Punto de partida del día: accesos al CRM, cambios de código de GitHub, diff, preview en vivo y revisión de cada cambio *(nuevo)* |
 | Proyectos | Tabla y Kanban (arrastrar y soltar), 10 tipos y 9 estados, tareas con prioridad, responsable, fecha y comentarios, progreso automático, archivos e historial |
 | Infraestructura | Servidores, dominios y DNS, bases de datos, aplicaciones/Workers, buckets R2, mapa de relaciones interactivo, monitorización con alertas e integraciones |
 | Finanzas | Facturas (series, numeración correlativa, IVA/IRPF, descuentos, PDF, envío por email, rectificativas), cobros, pagos recurrentes, gastos con justificante |
@@ -105,16 +105,21 @@ Cinco añadidos que **no modifican el esquema ni los datos existentes** (las mig
   - Interfaz: `web/src/pages/sales/SalesPage.jsx`, `dealFields` en `web/src/forms.js`, etiquetas en `web/src/lib/labels.js`, entrada «Ventas» en `web/src/layout/nav.js` y ruta `/ventas` en `web/src/App.jsx`.
   - Datos DEMO: `server/src/seed/demo.js` carga 6 oportunidades y las elimina con el resto de datos DEMO.
 
-### 3. Desarrollo: actividad de GitHub
+### 3. Trabajo: cambios de GitHub, preview en vivo y revisión
 
-- **Qué hace:** en cada proyecto se puede indicar el repositorio y la URL de preview. La página **Desarrollo** muestra los últimos commits de todos los proyectos con repo, filtrables por autor, con enlace al commit, al repositorio y al preview. En la ficha del proyecto aparece una pestaña «Desarrollo».
-- **Cómo:** el servidor consulta la API de GitHub (los navegadores nunca la llaman), valida `owner/repo` con una lista estricta y cachea 60 s. Sin token solo lee repos públicos (60 consultas/hora); con `GITHUB_TOKEN` en `.env` lee también privados. Si GitHub falla, la tarjeta muestra el motivo en lugar de romper la página.
+- **Qué hace:** la página **Trabajo** (menú lateral) es el punto de partida del día. Arriba tiene accesos directos a Ventas, Proyectos, Clientes, Finanzas e Incidencias; debajo, los últimos cambios de cada repositorio vinculado, con autor y estado. Al pulsar un cambio se abre una ventana con tres pestañas:
+  - **Cambios:** archivos modificados y diff con líneas añadidas y quitadas, sin salir del CRM.
+  - **Preview en vivo:** el sitio del cliente dentro del CRM, con tamaños móvil, tablet y escritorio, recarga y botón «Abrir en pestaña» (algunos sitios no permiten mostrarse dentro de otra web).
+  - **Revisión:** estado (Nuevo, En revisión, Aceptado, Cambios solicitados) y una nota. Al aceptar o pedir cambios, el otro socio recibe un aviso que abre directamente esa pestaña.
+  - Desde cada cambio hay enlaces al proyecto y al cliente, y los filtros «Por revisar» / «Aceptados» y por autor ayudan a ver qué falta por probar.
+- **Cómo:** en cada proyecto se rellena «Repositorio de GitHub» (`owner/repo` o URL) y «URL de preview». El servidor consulta la API de GitHub (el navegador nunca la llama), valida `owner/repo` y el sha con listas estrictas, recorta los diffs (40 archivos, 20.000 caracteres por archivo) y cachea (60 s la lista, 10 min cada commit). Sin `GITHUB_TOKEN` solo lee repos públicos (60 consultas/hora). `/desarrollo` redirige a `/trabajo`.
 - **Dónde:**
-  - Base de datos: `006_sales.sql` añade `projects.github_repo` y `projects.preview_url`.
-  - API: `server/src/routes/github.js` en `/api/github/activity` (`?project_id=` o `?client_id=`); campos validados en `server/src/routes/projects.js`; `GITHUB_TOKEN` en `server/src/config.js` y `.env.example`.
-  - Interfaz: `web/src/pages/development/DevelopmentPage.jsx`, `web/src/components/GithubActivity.jsx`, pestaña en `web/src/pages/projects/ProjectDetail.jsx`, y los dos campos en `projectFields` de `web/src/forms.js`.
+  - Base de datos: `006_sales.sql` (`projects.github_repo`, `projects.preview_url`) y `008_work.sql` (`change_reviews`).
+  - API: `server/src/routes/github.js` → `GET /api/github/activity`, `GET /api/github/commit`, `PUT /api/github/reviews`.
+  - Seguridad: `server/src/middleware/security.js` permite iframes solo a `https:` (`frameSrc`); el CRM sigue sin poder ser incrustado por otros (`frameAncestors 'none'`).
+  - Interfaz: `web/src/pages/work/WorkPage.jsx`, `web/src/components/CommitModal.jsx`, `DiffView.jsx`, `PreviewFrame.jsx`, `GithubActivity.jsx`; pestaña «Desarrollo» en la ficha del proyecto.
 
-### 4. Avisos de cobros en el móvil (PWA + notificaciones push)
+### 4. Avisos de cobros en el móvil (PWA + push) y por email
 
 - **Qué hace:** la web se puede instalar en el móvil como app («Web Pulsar») y avisa con una notificación del sistema cuando hay un cobro vencido, una factura o mensualidad próxima a vencer, una oportunidad ganada, etc. Al tocar el aviso se abre la pantalla correspondiente.
 - **Cómo se activa (cada socio, en cada dispositivo):** abre la web desde el móvil → campana → **«Activar avisos en el móvil»** → aceptar el permiso. El botón **Probar** envía una notificación de prueba.
@@ -122,6 +127,7 @@ Cinco añadidos que **no modifican el esquema ni los datos existentes** (las mig
   - **iPhone/iPad (iOS 16.4+):** hay que instalarla primero (Compartir → «Añadir a pantalla de inicio») y abrirla desde el icono.
   - **Requisito:** HTTPS en producción (el dominio de Cloudflare/Nginx ya lo cumple). En local solo funciona en `localhost`.
 - **Cómo funciona:** cada aviso interno nuevo (`notify()`) se envía además por Web Push a los dispositivos suscritos de sus destinatarios. Los avisos repetidos (misma `dedupe_key`) no vuelven a sonar. Los recordatorios de cobros ya existían y los genera el planificador; se controlan con el interruptor «Recordatorio de cobros» en Configuración → Monitorización y avisos. Los dispositivos dados de baja se limpian solos.
+- **También por email:** cada aviso nuevo se envía además por correo a los usuarios activos (asunto «Web Pulsar · …» y enlace directo). Requiere configurar el correo saliente en Configuración → Integraciones → Correo saliente (SMTP) y se apaga con el interruptor «Correo» en Configuración → Monitorización y avisos. Si el SMTP no está configurado, simplemente no se envía. Código: `server/src/services/notifyEmail.js`, enganchado en `server/src/lib/notify.js`.
 - **Dónde:**
   - Claves: `npm run setup` genera `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` en `.env` (cambia `VAPID_SUBJECT` por tu email). Si ya tenías `.env`, vuelve a ejecutar `npm run setup`.
   - Base de datos: `server/migrations/007_push.sql` (`push_subscriptions`).
@@ -136,7 +142,7 @@ Cinco añadidos que **no modifican el esquema ni los datos existentes** (las mig
 
 ### Tests
 
-`server/test/sales.test.js` y `server/test/push-branding.test.js`: validación del repo de GitHub, restricciones de `deals`, permisos, DEMO, detección de imágenes, PDF con y sin logo y push desactivado sin claves. `npm test` → 18 pruebas.
+`server/test/sales.test.js`, `push-branding.test.js` y `work.test.js` (revisiones y email): validación del repo de GitHub, restricciones de `deals`, permisos, DEMO, detección de imágenes, PDF con y sin logo y push desactivado sin claves. `npm test` → 21 pruebas.
 
 ## Documentación
 

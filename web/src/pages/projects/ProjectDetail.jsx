@@ -342,7 +342,7 @@ export default function ProjectDetail() {
         </div>
       )}
       {tab === 'desarrollo' && (
-        github.data?.items?.[0] ? <RepoCard entry={github.data.items[0]} showProject={false} /> : github.loading ? <Skeleton className="h-64 rounded-card" /> : <Glass><NoReposState canWrite={can('projects.write')} /></Glass>
+        github.data?.items?.[0] ? <RepoCard entry={github.data.items[0]} showProject={false} onOpen={(e, c, tab) => navigate(`/trabajo?proyecto=${e.project.id}&cambio=${c.sha}${tab === 'preview' ? '&tab=preview' : ''}`)} /> : github.loading ? <Skeleton className="h-64 rounded-card" /> : <Glass><NoReposState canWrite={can('projects.write')} /></Glass>
       )}
       {tab === 'historial' && (
         <Section title="Historial del proyecto" icon={Activity}>
