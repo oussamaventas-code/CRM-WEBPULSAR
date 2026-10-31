@@ -22,6 +22,9 @@ export const PROJECT_STATUS = make({
 });
 export const KANBAN_COLUMNS = ['quote', 'pending_approval', 'approved', 'in_development', 'in_review', 'waiting_client', 'finished', 'delivered'];
 
+export const DEAL_STAGE = make({ lead: ['Lead', 'mute'], contacted: ['Contactado', 'brand'], proposal: ['Propuesta', 'violet'], negotiation: ['Negociación', 'warn'], won: ['Ganado', 'ok'], lost: ['Perdido', 'danger'] });
+export const DEAL_COLUMNS = ['lead', 'contacted', 'proposal', 'negotiation', 'won', 'lost'];
+
 export const TASK_STATUS = make({ todo: ['Por hacer', 'mute'], in_progress: ['En curso', 'brand'], review: ['En revisión', 'violet'], done: ['Hecha', 'ok'] });
 export const PRIORITY = make({ low: ['Baja', 'mute'], medium: ['Media', 'brand'], high: ['Alta', 'warn'], critical: ['Crítica', 'danger'] });
 

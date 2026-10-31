@@ -26,7 +26,7 @@ function SyncReport({ report }) {
     report.r2 != null && `${report.r2} buckets R2`,
   ].filter(Boolean);
   return (
-    <div className="mt-3 rounded-[14px] bg-white/60 px-3.5 py-2.5 text-[12px]">
+    <div className="mt-3 rounded-[14px] bg-surface/60 px-3.5 py-2.5 text-[12px]">
       <p className="font-medium text-ink">Última sincronización</p>
       <p className="text-ink-soft">{items.join(' · ') || 'Sin recursos encontrados'}</p>
       {report.warnings?.length > 0 && (
@@ -78,7 +78,7 @@ function IntegrationCard({ integration: i }) {
   return (
     <Glass className="flex flex-col p-5">
       <div className="flex items-start gap-3">
-        <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white bg-gradient-to-b from-brand-ice to-white text-brand shadow-glass">
+        <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-surface bg-gradient-to-b from-brand-ice to-surface text-brand shadow-glass">
           <Icon className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">

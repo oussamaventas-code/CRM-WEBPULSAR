@@ -122,7 +122,7 @@ export function CommandPalette({ open, onClose }) {
                   onClick={() => select(item)}
                   className={cx('flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-left', i === index ? 'bg-brand-ice/80' : 'hover:bg-brand-ice/40')}
                 >
-                  <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white text-brand shadow-[0_1px_2px_rgba(23,32,51,0.08)]">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-surface text-brand shadow-[0_1px_2px_rgba(23,32,51,0.08)]">
                     <Icon className="h-4 w-4" />
                   </span>
                   <span className="min-w-0 flex-1">

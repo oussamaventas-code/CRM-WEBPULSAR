@@ -196,7 +196,7 @@ function UsersTab() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             {roles.data.roles.map((r) => (
-              <div key={r.key} className="rounded-[16px] border border-white/80 bg-white/55 p-4">
+              <div key={r.key} className="rounded-[16px] border border-surface/80 bg-surface/55 p-4">
                 <div className="flex items-center justify-between"><LabelBadge set={ROLE} value={r.key} dot={false} /><span className="text-[11.5px] text-ink-soft">{r.users} usuarios</span></div>
                 <p className="mt-2 text-[12.5px] text-ink-soft">{r.description}</p>
                 <p className="mt-2 text-[11.5px] text-ink-faint">{r.permissions.length} de {roles.data.permissions.length} permisos</p>
@@ -245,7 +245,7 @@ function UsersTab() {
       />
       <Modal open={!!link} onClose={() => setLink(null)} title="Enlace para establecer contraseña" icon={KeyRound} size="md" footer={<Button onClick={() => setLink(null)}>Hecho</Button>}>
         <Notice tone="warn">Envíaselo a {link?.name} por un canal seguro. Caduca en {link?.expires_minutes} minutos y solo se muestra ahora.</Notice>
-        <div className="mt-4 flex items-center gap-2 rounded-[14px] border border-line bg-white px-3 py-2.5">
+        <div className="mt-4 flex items-center gap-2 rounded-[14px] border border-line bg-surface px-3 py-2.5">
           <code className="mono flex-1 truncate text-[12px]">{link?.url}</code>
           <IconButton icon={Copy} label="Copiar enlace" onClick={async () => { await navigator.clipboard.writeText(link.url); toast.success('Enlace copiado'); }} />
         </div>

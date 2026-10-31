@@ -41,7 +41,7 @@ function InfrastructureRow({ infra }) {
       <div className="grid gap-4 2xl:grid-cols-[1.1fr_1fr]">
         <div className="grid gap-3 sm:grid-cols-3">
           {blocks.map((b) => (
-            <Link key={b.label} to={b.to} className="lift rounded-[18px] border border-white/80 bg-white/55 p-4">
+            <Link key={b.label} to={b.to} className="lift rounded-[18px] border border-surface/80 bg-surface/55 p-4">
               <div className="flex items-center justify-between">
                 <b.icon className="h-[18px] w-[18px] text-brand" strokeWidth={1.9} />
                 <span className="num text-[22px] font-medium leading-none">{int(b.counts.total)}</span>
@@ -56,7 +56,7 @@ function InfrastructureRow({ infra }) {
               ['Servicios activos', infra.active_services, Package],
               ['Alertas abiertas', infra.open_alerts, TriangleAlert],
             ].map(([label, value, Icon]) => (
-              <div key={label} className="rounded-[16px] border border-white/80 bg-white/45 px-3.5 py-3">
+              <div key={label} className="rounded-[16px] border border-surface/80 bg-surface/45 px-3.5 py-3">
                 <Icon className={cx('h-4 w-4', label === 'Alertas abiertas' && value ? 'text-danger' : 'text-ink-soft')} />
                 <p className="num mt-1.5 text-[18px] font-medium">{int(value)}</p>
                 <p className="text-[11.5px] leading-tight text-ink-soft">{label}</p>
@@ -64,7 +64,7 @@ function InfrastructureRow({ infra }) {
             ))}
           </div>
         </div>
-        <div className="rounded-[18px] border border-white/80 bg-white/45">
+        <div className="rounded-[18px] border border-surface/80 bg-surface/45">
           <div className="flex items-center justify-between px-4 pb-2 pt-3">
             <p className="text-[12.5px] font-medium">Servidores</p>
             <span className="text-[11.5px] text-ink-soft">Última comprobación</span>
@@ -109,8 +109,8 @@ function QuickActionsRow() {
     <Section title="Acciones rápidas" icon={Sparkles}>
       <div className="grid grid-cols-2 gap-2.5">
         {actions.map(([label, Icon, kind]) => (
-          <button key={kind} onClick={() => quick.open(kind)} className="lift group flex flex-col items-start gap-2.5 rounded-[16px] border border-white/80 bg-white/60 p-3.5 text-left">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-brand-ice to-white text-brand shadow-[0_4px_10px_-6px_rgba(37,99,235,0.5)] transition-transform duration-200 group-hover:scale-[1.04]">
+          <button key={kind} onClick={() => quick.open(kind)} className="lift group flex flex-col items-start gap-2.5 rounded-[16px] border border-surface/80 bg-surface/60 p-3.5 text-left">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-brand-ice to-surface text-brand shadow-[0_4px_10px_-6px_rgba(37,99,235,0.5)] transition-transform duration-200 group-hover:scale-[1.04]">
               <Icon className="h-[17px] w-[17px]" strokeWidth={1.9} />
             </span>
             <span className="text-[12.5px] font-medium">{label}</span>

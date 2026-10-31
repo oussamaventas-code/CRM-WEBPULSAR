@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { ToastProvider } from './context/ToastContext.jsx';
+import { ThemeProvider } from './context/ThemeContext.jsx';
 import { AppShell } from './layout/AppShell.jsx';
 import { PulsarMark } from './layout/Logo.jsx';
 import { Skeleton } from './components/ui.jsx';
@@ -12,6 +13,8 @@ const ClientsPage = lazy(() => import('./pages/clients/ClientsPage.jsx'));
 const ClientDetail = lazy(() => import('./pages/clients/ClientDetail.jsx'));
 const ProjectsPage = lazy(() => import('./pages/projects/ProjectsPage.jsx'));
 const ProjectDetail = lazy(() => import('./pages/projects/ProjectDetail.jsx'));
+const SalesPage = lazy(() => import('./pages/sales/SalesPage.jsx'));
+const DevelopmentPage = lazy(() => import('./pages/development/DevelopmentPage.jsx'));
 const InfrastructurePage = lazy(() => import('./pages/infrastructure/InfrastructurePage.jsx'));
 const ServerDetail = lazy(() => import('./pages/infrastructure/ServerDetail.jsx'));
 const DomainDetail = lazy(() => import('./pages/infrastructure/DomainDetail.jsx'));
@@ -73,6 +76,7 @@ const page = (el) => <Suspense fallback={<PageFallback />}>{el}</Suspense>;
 export default function App() {
   return (
     <BrowserRouter>
+      <ThemeProvider>
       <ToastProvider>
         <AuthProvider>
           <Routes>
@@ -83,6 +87,8 @@ export default function App() {
               <Route index element={page(<Overview />)} />
               <Route path="clientes" element={page(<ClientsPage />)} />
               <Route path="clientes/:id" element={page(<ClientDetail />)} />
+              <Route path="ventas" element={page(<SalesPage />)} />
+              <Route path="desarrollo" element={page(<DevelopmentPage />)} />
               <Route path="proyectos" element={page(<ProjectsPage />)} />
               <Route path="proyectos/:id" element={page(<ProjectDetail />)} />
               <Route path="infraestructura" element={page(<InfrastructurePage />)} />
@@ -104,6 +110,7 @@ export default function App() {
           </Routes>
         </AuthProvider>
       </ToastProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

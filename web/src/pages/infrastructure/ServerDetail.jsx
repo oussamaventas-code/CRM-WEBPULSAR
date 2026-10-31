@@ -37,7 +37,7 @@ function AgentTokenModal({ result, onClose }) {
   return (
     <Modal open onClose={onClose} title="Token del agente generado" icon={KeyRound} size="lg" footer={<Button onClick={onClose}>He guardado el token</Button>}>
       <Notice tone="warn" title="Se muestra una sola vez">Copia el token ahora: el servidor solo guarda su huella SHA-256. Si lo pierdes, genera uno nuevo (el anterior quedará revocado).</Notice>
-      <div className="mt-4 flex items-center gap-2 rounded-[14px] border border-line bg-white px-3 py-2.5">
+      <div className="mt-4 flex items-center gap-2 rounded-[14px] border border-line bg-surface px-3 py-2.5">
         <code className="mono flex-1 truncate text-[12px]">{result.token}</code>
         <IconButton icon={Copy} label="Copiar token" onClick={() => copy(result.token, 'Token copiado')} />
       </div>
@@ -120,7 +120,7 @@ export default function ServerDetail() {
                   />
                 )}
                 <Button variant="secondary" icon={Pencil} onClick={() => setEdit(true)}>Editar</Button>
-                <Menu trigger={({ toggle }) => <IconButton icon={MoreHorizontal} label="Más" onClick={toggle} className="border border-line bg-white/70" />} items={[{ label: 'Eliminar del inventario', icon: Trash2, danger: true, onClick: () => setRemove(true) }]} />
+                <Menu trigger={({ toggle }) => <IconButton icon={MoreHorizontal} label="Más" onClick={toggle} className="border border-line bg-surface/70" />} items={[{ label: 'Eliminar del inventario', icon: Trash2, danger: true, onClick: () => setRemove(true) }]} />
               </>
             )}
           </>
@@ -189,7 +189,7 @@ export default function ServerDetail() {
             <Stat label="Cliente">{s.client_id ? <Link className="text-brand hover:underline" to={`/clientes/${s.client_id}`}>{s.client_name}</Link> : null}</Stat>
             <Stat label="Proyecto">{s.project_id ? <Link className="text-brand hover:underline" to={`/proyectos/${s.project_id}`}>{s.project_name}</Link> : null}</Stat>
           </dl>
-          {s.notes && <p className="mt-4 whitespace-pre-line rounded-[12px] bg-white/55 p-3 text-[12.5px] text-ink-soft">{s.notes}</p>}
+          {s.notes && <p className="mt-4 whitespace-pre-line rounded-[12px] bg-surface/55 p-3 text-[12.5px] text-ink-soft">{s.notes}</p>}
         </Section>
       </div>
 

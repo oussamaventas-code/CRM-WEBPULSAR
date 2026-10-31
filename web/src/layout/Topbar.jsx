@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bell, CheckCheck, CreditCard, FolderKanban, Menu as MenuIcon, Plug, Plus, Receipt, Search, Server, TriangleAlert, UserPlus } from 'lucide-react';
+import { Bell, CheckCheck, CreditCard, FolderKanban, Menu as MenuIcon, Monitor, Moon, Plug, Plus, Receipt, Search, Server, Sun, TriangleAlert, UserPlus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useTheme } from '../context/ThemeContext.jsx';
 import { useQuickActions } from './QuickActions.jsx';
 import { Avatar, Dot, Menu, cx } from '../components/ui.jsx';
 import { api } from '../lib/api.js';
@@ -36,7 +37,7 @@ function Notifications() {
     <div className="relative" ref={ref}>
       <button className="icon-btn relative" onClick={() => setOpen((o) => !o)} aria-label={`Notificaciones${unread ? ` (${unread} sin leer)` : ''}`}>
         <Bell className="h-[18px] w-[18px]" strokeWidth={1.9} />
-        {unread > 0 && <span className="num absolute -right-0.5 -top-0.5 min-w-[17px] rounded-full bg-danger px-1 text-center text-[10px] font-medium leading-[17px] text-white ring-2 ring-white">{unread > 99 ? '99+' : unread}</span>}
+        {unread > 0 && <span className="num absolute -right-0.5 -top-0.5 min-w-[17px] rounded-full bg-danger px-1 text-center text-[10px] font-medium leading-[17px] text-white ring-2 ring-surface">{unread > 99 ? '99+' : unread}</span>}
       </button>
       {open && (
         <div className="glass-strong absolute right-0 z-50 mt-2 w-[min(380px,calc(100vw-24px))] overflow-hidden shadow-float">
@@ -87,7 +88,7 @@ function IntegrationIndicator() {
       trigger={({ toggle }) => (
         <button onClick={toggle} className="icon-btn relative" aria-label={label} title={label}>
           <Plug className="h-[18px] w-[18px]" strokeWidth={1.9} />
-          <span className="absolute bottom-1.5 right-1.5 rounded-full bg-white p-[1.5px]">
+          <span className="absolute bottom-1.5 right-1.5 rounded-full bg-surface p-[1.5px]">
             <Dot tone={tone} pulse={tone === 'danger'} />
           </span>
         </button>
@@ -101,6 +102,22 @@ function IntegrationIndicator() {
         { divider: true },
         { label: 'Configurar integraciones', onClick: () => navigate('/configuracion?tab=integraciones') },
       ]}
+    />
+  );
+}
+
+function ThemeToggle() {
+  const { mode, resolved, setMode } = useTheme();
+  const Icon = resolved === 'dark' ? Moon : Sun;
+  const pick = (value, label, icon) => ({ label, icon, hint: mode === value ? '✓' : undefined, onClick: () => setMode(value) });
+  return (
+    <Menu
+      trigger={({ toggle }) => (
+        <button onClick={toggle} className="icon-btn" aria-label="Cambiar tema" title="Tema">
+          <Icon className="h-[18px] w-[18px]" strokeWidth={1.9} />
+        </button>
+      )}
+      items={[pick('light', 'Claro', Sun), pick('dark', 'Oscuro', Moon), pick('system', 'Sistema', Monitor)]}
     />
   );
 }
@@ -124,13 +141,14 @@ export function Topbar({ onMenu, onSearch }) {
         <button className="icon-btn lg:hidden" onClick={onMenu} aria-label="Abrir menú">
           <MenuIcon className="h-5 w-5" />
         </button>
-        <button onClick={onSearch} className="group flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-[14px] border border-line/80 bg-white/70 px-3 text-left text-[13px] text-ink-faint transition-all hover:border-brand/30 hover:bg-white md:max-w-[440px]" aria-label="Búsqueda global">
+        <button onClick={onSearch} className="group flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-[14px] border border-line/80 bg-surface/70 px-3 text-left text-[13px] text-ink-faint transition-all hover:border-brand/30 hover:bg-surface md:max-w-[440px]" aria-label="Búsqueda global">
           <Search className="h-4 w-4 shrink-0 text-ink-soft" />
           <span className="truncate">Buscar clientes, proyectos, facturas, servidores…</span>
           <span className="kbd ml-auto hidden sm:inline">Ctrl K</span>
         </button>
         <p className="hidden whitespace-nowrap text-[12.5px] font-medium text-ink-soft xl:block">{longDate()}</p>
         <div className="ml-auto flex items-center gap-1">
+          <ThemeToggle />
           {can('infrastructure.read') && <IntegrationIndicator />}
           <Notifications />
           {createItems.length > 0 && (

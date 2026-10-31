@@ -177,13 +177,13 @@ export function FinanceChart({ data, height = 260, showTable = false }) {
             <svg ref={svgRef} width={width} height={height} className="block overflow-visible" role="img" aria-label="Evolución de ingresos, gastos y beneficio">
               {geo.ticks.map((t) => (
                 <g key={t}>
-                  <line x1={geo.pad.l} x2={width - geo.pad.r} y1={geo.y(t)} y2={geo.y(t)} stroke={t === 0 ? '#CBD5E1' : '#E4EAF2'} strokeDasharray={t === 0 ? undefined : '2 4'} />
+                  <line x1={geo.pad.l} x2={width - geo.pad.r} y1={geo.y(t)} y2={geo.y(t)} stroke={t === 0 ? 'rgb(var(--c-mute) / 0.55)' : 'rgb(var(--c-line))'} strokeDasharray={t === 0 ? undefined : '2 4'} />
                   <text x={geo.pad.l - 10} y={geo.y(t)} dy="0.32em" textAnchor="end" className="fill-ink-soft text-[11px] num">
                     {moneyCompact(t)}
                   </text>
                 </g>
               ))}
-              {active != null && <rect x={geo.pad.l + geo.band * active + 1} y={geo.pad.t} width={geo.band - 2} height={geo.ih} rx="8" fill="#EAF3FF" opacity="0.7" />}
+              {active != null && <rect x={geo.pad.l + geo.band * active + 1} y={geo.pad.t} width={geo.band - 2} height={geo.ih} rx="8" fill="rgb(var(--c-brand-ice))" opacity="0.7" />}
               {series.map((b, i) => {
                 const x = geo.cx0(i) - geo.barW - 1;
                 return (
@@ -198,7 +198,7 @@ export function FinanceChart({ data, height = 260, showTable = false }) {
               {tip && (
                 <>
                   {['expenses', 'profit'].map((k) => (
-                    <circle key={k} cx={geo.cx0(active)} cy={geo.y(tip[k])} r="4.5" fill={SERIES[k].color} stroke="#fff" strokeWidth="2" />
+                    <circle key={k} cx={geo.cx0(active)} cy={geo.y(tip[k])} r="4.5" fill={SERIES[k].color} stroke="rgb(var(--c-surface))" strokeWidth="2" />
                   ))}
                 </>
               )}
@@ -314,7 +314,7 @@ export function MetricChart({ points, lines, height = 180, max, format = (v) => 
         <svg ref={svgRef} width={width} height={height} className="block" onPointerMove={onMove} onPointerLeave={() => setActive(null)} role="img" aria-label={lines.map((l) => l.label).join(', ')}>
           {geo.ticks.map((t) => (
             <g key={t}>
-              <line x1={geo.pad.l} x2={width - geo.pad.r} y1={geo.y(t)} y2={geo.y(t)} stroke="#E4EAF2" strokeDasharray={t ? '2 4' : undefined} />
+              <line x1={geo.pad.l} x2={width - geo.pad.r} y1={geo.y(t)} y2={geo.y(t)} stroke="rgb(var(--c-line))" strokeDasharray={t ? '2 4' : undefined} />
               <text x={geo.pad.l - 8} y={geo.y(t)} dy="0.32em" textAnchor="end" className="fill-ink-soft text-[10.5px] num">
                 {format(t)}
               </text>
@@ -330,8 +330,8 @@ export function MetricChart({ points, lines, height = 180, max, format = (v) => 
           ))}
           {tip && (
             <>
-              <line x1={geo.x(tip)} x2={geo.x(tip)} y1={geo.pad.t} y2={geo.pad.t + geo.ih} stroke="#94A3B8" strokeDasharray="3 3" />
-              {lines.map((l) => (l.value(tip) == null ? null : <circle key={l.label} cx={geo.x(tip)} cy={geo.y(l.value(tip))} r="4" fill={l.color} stroke="#fff" strokeWidth="2" />))}
+              <line x1={geo.x(tip)} x2={geo.x(tip)} y1={geo.pad.t} y2={geo.pad.t + geo.ih} stroke="rgb(var(--c-mute))" strokeDasharray="3 3" />
+              {lines.map((l) => (l.value(tip) == null ? null : <circle key={l.label} cx={geo.x(tip)} cy={geo.y(l.value(tip))} r="4" fill={l.color} stroke="rgb(var(--c-surface))" strokeWidth="2" />))}
             </>
           )}
         </svg>
@@ -354,7 +354,7 @@ export function MetricChart({ points, lines, height = 180, max, format = (v) => 
   );
 }
 
-const BAR_COLOR = { up: 'bg-ok', degraded: 'bg-warn', partial: 'bg-warn', down: 'bg-danger', none: 'bg-[#E4EAF2]' };
+const BAR_COLOR = { up: 'bg-ok', degraded: 'bg-warn', partial: 'bg-warn', down: 'bg-danger', none: 'bg-track' };
 const BAR_LABEL = { up: 'correcto', degraded: 'degradado', partial: 'fallos parciales', down: 'caído', none: 'sin datos' };
 
 export function UptimeBars({ bars, className }) {
@@ -375,11 +375,11 @@ export function Ring({ value, size = 56, stroke = 6, label, sub }) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const v = value == null ? 0 : Math.min(100, Math.max(0, value));
-  const color = value == null ? '#E4EAF2' : v >= 90 ? '#E5484D' : v >= 80 ? '#F59E0B' : '#2563EB';
+  const color = value == null ? 'rgb(var(--c-line))' : v >= 90 ? '#E5484D' : v >= 80 ? '#F59E0B' : 'rgb(var(--c-brand))';
   return (
     <div className="flex items-center gap-3">
       <svg width={size} height={size} className="-rotate-90" aria-hidden>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#E9EEF5" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgb(var(--c-track))" strokeWidth={stroke} />
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c - (v / 100) * c} className="transition-[stroke-dashoffset] duration-700" />
       </svg>
       <div>

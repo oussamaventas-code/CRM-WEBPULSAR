@@ -79,18 +79,18 @@ export default function TestimonialsPage() {
                   <p className="mt-1 whitespace-pre-line text-[13px] text-ink-soft">{t.internal_notes}</p>
                 </div>
               )}
-              <div className="mt-4 flex-1 rounded-[16px] border border-white/80 bg-white/60 p-4">
+              <div className="mt-4 flex-1 rounded-[16px] border border-surface/80 bg-surface/60 p-4">
                 <p className="mb-1 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-ink-soft"><Quote className="h-3 w-3" />Propuesta de texto</p>
                 {t.draft_text ? <p className="whitespace-pre-line text-[13.5px] italic text-ink">«{t.draft_text}»</p> : <p className="text-[12.5px] text-ink-faint">Sin redactar todavía.</p>}
               </div>
               {t.status === 'authorized' && (
-                <div className="mt-3 rounded-[14px] bg-ok-soft px-3.5 py-2.5 text-[12px] text-[#0E6B45]">
+                <div className="mt-3 rounded-[14px] bg-ok-soft px-3.5 py-2.5 text-[12px] text-ok-ink">
                   <p className="font-medium">Aprobado por {t.approved_by_name} el {date(t.approved_at)}</p>
                   <p>{t.approval_evidence}</p>
                   <p className="mt-0.5 font-medium">{t.can_publish ? 'Con permiso para publicar' : 'Sin permiso para publicar (uso interno)'}</p>
                 </div>
               )}
-              {t.status === 'rejected' && t.approval_evidence && <p className="mt-3 rounded-[14px] bg-danger-soft px-3.5 py-2.5 text-[12px] text-[#9F1D23]">{t.approval_evidence}</p>}
+              {t.status === 'rejected' && t.approval_evidence && <p className="mt-3 rounded-[14px] bg-danger-soft px-3.5 py-2.5 text-[12px] text-danger-ink">{t.approval_evidence}</p>}
               <div className="mt-4 flex flex-wrap gap-2">
                 {can('testimonials.write') && t.status !== 'authorized' && <Button size="sm" variant="secondary" icon={PenLine} onClick={() => setDraft(t)}>{t.draft_text ? 'Editar propuesta' : 'Redactar propuesta'}</Button>}
                 {can('testimonials.approve') && t.draft_text && t.status !== 'authorized' && <Button size="sm" icon={BadgeCheck} onClick={() => setAuthorize(t)}>Registrar autorización</Button>}
@@ -139,7 +139,7 @@ export default function TestimonialsPage() {
         onClose={() => setAuthorize(null)}
         title="Registrar autorización del cliente"
         icon={BadgeCheck}
-        notice={authorize && <div className="rounded-[14px] bg-white/70 p-3 text-[13px] italic">«{authorize.draft_text}»</div>}
+        notice={authorize && <div className="rounded-[14px] bg-surface/70 p-3 text-[13px] italic">«{authorize.draft_text}»</div>}
         fields={[
           { name: 'approved_at', label: 'Fecha de aprobación', type: 'date', required: true, default: todayIso() },
           { name: 'approved_by_name', label: 'Persona que lo aprueba', required: true },

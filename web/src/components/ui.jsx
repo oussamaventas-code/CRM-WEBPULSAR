@@ -35,12 +35,12 @@ export function IconButton({ icon: Icon, label, className, ...rest }) {
 }
 
 const TONES = {
-  ok: 'bg-ok-soft text-[#0E7A4E]',
+  ok: 'bg-ok-soft text-ok-ink',
   warn: 'bg-warn-soft text-warn-ink',
-  danger: 'bg-danger-soft text-[#B4232A]',
+  danger: 'bg-danger-soft text-danger-ink',
   mute: 'bg-mute-soft text-ink-soft',
   brand: 'bg-brand-ice text-brand-deep',
-  violet: 'bg-violet-soft text-[#5B45C8]',
+  violet: 'bg-violet-soft text-violet-ink',
 };
 const DOTS = { ok: 'bg-ok', warn: 'bg-warn', danger: 'bg-danger', mute: 'bg-mute', brand: 'bg-brand', violet: 'bg-violet' };
 
@@ -73,7 +73,7 @@ export function LabelBadge({ set, value, dot = true, className }) {
 }
 
 export function DemoTag() {
-  return <span className="rounded-md bg-violet-soft px-1.5 py-[1px] font-mono text-[10px] font-medium uppercase tracking-wider text-[#5B45C8]">Demo</span>;
+  return <span className="rounded-md bg-violet-soft px-1.5 py-[1px] font-mono text-[10px] font-medium uppercase tracking-wider text-violet-ink">Demo</span>;
 }
 
 export function Skeleton({ className }) {
@@ -86,7 +86,7 @@ export function EmptyState({ icon: Icon, title, description, action, className, 
       {Icon && (
         <div className="relative mb-4">
           <div className="absolute inset-0 -m-3 rounded-full bg-brand-ice/70 blur-xl" />
-          <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-white bg-gradient-to-b from-white to-brand-ice text-brand shadow-glass">
+          <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-surface bg-gradient-to-b from-surface to-brand-ice text-brand shadow-glass">
             <Icon className="h-[22px] w-[22px]" strokeWidth={1.7} />
           </div>
         </div>
@@ -130,7 +130,7 @@ export function Avatar({ name, size = 32, className }) {
 export function Progress({ value = 0, tone = 'brand', className }) {
   const color = { brand: 'from-brand-light to-brand', ok: 'from-[#4ADE80] to-ok', warn: 'from-[#FCD34D] to-warn', danger: 'from-[#FB7185] to-danger' }[tone];
   return (
-    <div className={cx('h-1.5 w-full overflow-hidden rounded-full bg-[#E9EEF5]', className)} role="progressbar" aria-valuenow={value} aria-valuemin={0} aria-valuemax={100}>
+    <div className={cx('h-1.5 w-full overflow-hidden rounded-full bg-track', className)} role="progressbar" aria-valuenow={value} aria-valuemin={0} aria-valuemax={100}>
       <div className={cx('h-full rounded-full bg-gradient-to-r transition-[width] duration-500', color)} style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
     </div>
   );
@@ -146,7 +146,7 @@ export function Tabs({ tabs, value, onChange, className }) {
   return (
     <div className={cx('no-scrollbar relative -mx-1 overflow-x-auto px-1 py-1', className)}>
       <div className="glass relative inline-flex min-w-max gap-1 !rounded-[16px] p-1" role="tablist">
-        {indicator && <span className="absolute bottom-1 top-1 rounded-[11px] bg-white shadow-[0_1px_3px_rgba(23,32,51,0.10),0_4px_12px_-6px_rgba(23,59,114,0.18)] transition-all duration-300 ease-out" style={indicator} />}
+        {indicator && <span className="absolute bottom-1 top-1 rounded-[11px] bg-surface shadow-[0_1px_3px_rgba(23,32,51,0.10),0_4px_12px_-6px_rgba(23,59,114,0.18)] transition-all duration-300 ease-out" style={indicator} />}
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -249,9 +249,9 @@ export function Switch({ checked, onChange, label, description, disabled }) {
         aria-checked={!!checked}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={cx('relative mt-0.5 h-[22px] w-[38px] shrink-0 rounded-full transition-colors duration-200', checked ? 'bg-brand' : 'bg-[#D7DFEA]')}
+        className={cx('relative mt-0.5 h-[22px] w-[38px] shrink-0 rounded-full transition-colors duration-200', checked ? 'bg-brand' : 'bg-track')}
       >
-        <span className={cx('absolute top-[3px] h-4 w-4 rounded-full bg-white shadow transition-transform duration-200', checked ? 'translate-x-[19px]' : 'translate-x-[3px]')} />
+        <span className={cx('absolute top-[3px] h-4 w-4 rounded-full bg-surface shadow transition-transform duration-200', checked ? 'translate-x-[19px]' : 'translate-x-[3px]')} />
       </button>
       {(label || description) && (
         <span>
@@ -373,7 +373,7 @@ export function Chips({ options, value, onChange }) {
 }
 
 export function Notice({ tone = 'brand', icon: Icon = CircleAlert, title, children, className }) {
-  const styles = { brand: 'border-brand/15 bg-brand-ice/60 text-brand-deep', warn: 'border-warn/25 bg-warn-soft text-warn-ink', danger: 'border-danger/20 bg-danger-soft text-[#9F1D23]', ok: 'border-ok/20 bg-ok-soft text-[#0E6B45]' }[tone];
+  const styles = { brand: 'border-brand/15 bg-brand-ice/60 text-brand-deep', warn: 'border-warn/25 bg-warn-soft text-warn-ink', danger: 'border-danger/20 bg-danger-soft text-danger-ink', ok: 'border-ok/20 bg-ok-soft text-ok-ink' }[tone];
   return (
     <div className={cx('flex gap-3 rounded-[16px] border px-4 py-3 text-[12.5px]', styles, className)}>
       <Icon className="mt-0.5 h-4 w-4 shrink-0" />

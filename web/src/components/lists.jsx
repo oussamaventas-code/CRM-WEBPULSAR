@@ -267,7 +267,7 @@ export function RecurringTable({ params, empty }) {
           { key: 'amount', header: 'Importe', align: 'right', render: (r) => <span className="num font-medium">{money(r.amount_cents)}</span> },
           { key: 'freq', header: 'Periodicidad', hideOnMobile: true, render: (r) => FREQUENCY.label(r.frequency) },
           { key: 'next', header: 'Próximo', render: (r) => (r.status === 'active' ? <DueDate value={r.next_due_date} /> : <span className="text-ink-faint">—</span>) },
-          { key: 'state', header: 'Cobros', render: (r) => <div className="text-[12px]">{r.pending_count ? <p className="font-medium text-warn-ink">{r.pending_count} {r.pending_count === 1 ? 'cuota pendiente' : 'cuotas pendientes'} · {money(r.pending_cents)}</p> : <p className="text-[#0E7A4E]">Al día</p>}<p className="text-ink-soft">{r.last_paid_at ? `Último cobro ${date(r.last_paid_at)}` : 'Sin cobros todavía'}</p></div> },
+          { key: 'state', header: 'Cobros', render: (r) => <div className="text-[12px]">{r.pending_count ? <p className="font-medium text-warn-ink">{r.pending_count} {r.pending_count === 1 ? 'cuota pendiente' : 'cuotas pendientes'} · {money(r.pending_cents)}</p> : <p className="text-ok-ink">Al día</p>}<p className="text-ink-soft">{r.last_paid_at ? `Último cobro ${date(r.last_paid_at)}` : 'Sin cobros todavía'}</p></div> },
           { key: 'status', header: 'Estado', render: (r) => <LabelBadge set={RECURRING_STATUS} value={r.status} /> },
           can('finance.write') && {
             key: 'actions',

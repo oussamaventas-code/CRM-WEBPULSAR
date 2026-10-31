@@ -70,7 +70,7 @@ function KanbanBoard({ filters }) {
               <div className="flex items-center gap-2 px-2 pb-2.5 pt-1.5">
                 <span className={cx('h-2 w-2 rounded-full', COLUMN_TONE[status])} />
                 <p className="text-[12.5px] font-medium">{PROJECT_STATUS.label(status)}</p>
-                <span className="num ml-auto rounded-full bg-white/80 px-2 text-[11px] text-ink-soft">{cards.length}</span>
+                <span className="num ml-auto rounded-full bg-surface/80 px-2 text-[11px] text-ink-soft">{cards.length}</span>
               </div>
               <div className="flex min-h-[120px] flex-col gap-2">
                 {cards.map((p) => (
@@ -80,7 +80,7 @@ function KanbanBoard({ filters }) {
                     draggable={can('projects.write')}
                     onDragStart={() => setDragging(p)}
                     onDragEnd={() => setDragging(null)}
-                    className={cx('lift block rounded-[16px] border border-white/90 bg-white/85 p-3.5 shadow-[0_1px_2px_rgba(23,32,51,0.05)]', dragging?.id === p.id && 'opacity-50')}
+                    className={cx('lift block rounded-[16px] border border-surface/90 bg-surface/85 p-3.5 shadow-[0_1px_2px_rgba(23,32,51,0.05)]', dragging?.id === p.id && 'opacity-50')}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-[13px] font-medium leading-snug">{p.name}</p>

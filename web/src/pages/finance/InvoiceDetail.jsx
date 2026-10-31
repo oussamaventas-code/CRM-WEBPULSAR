@@ -54,13 +54,13 @@ export default function InvoiceDetail() {
         actions={
           <>
             <Button variant="secondary" icon={Eye} onClick={() => openPdf(`/invoices/${id}/pdf`).catch((e) => toast.error(e))}>Ver PDF</Button>
-            <IconButton icon={Download} label="Descargar PDF" className="border border-line bg-white/70" onClick={() => download(`/invoices/${id}/pdf?download=1`, pdfName).catch((e) => toast.error(e))} />
+            <IconButton icon={Download} label="Descargar PDF" className="border border-line bg-surface/70" onClick={() => download(`/invoices/${id}/pdf?download=1`, pdfName).catch((e) => toast.error(e))} />
             {draft && can('finance.write') && <Link to={`/finanzas/facturas/${id}/editar`} className="btn-secondary"><Pencil className="h-4 w-4" />Editar</Link>}
             {draft && can('invoices.issue') && <Button icon={FileCheck2} onClick={() => setIssue(true)}>Emitir factura</Button>}
             {open && can('finance.write') && <Button icon={Banknote} onClick={() => setPay(true)}>Registrar cobro</Button>}
             {(!draft || can('finance.write')) && (
               <Menu
-                trigger={({ toggle }) => <IconButton icon={MoreHorizontal} label="Más acciones" onClick={toggle} className="border border-line bg-white/70" />}
+                trigger={({ toggle }) => <IconButton icon={MoreHorizontal} label="Más acciones" onClick={toggle} className="border border-line bg-surface/70" />}
                 items={[
                   !draft && can('invoices.issue') && { label: 'Enviar por email', icon: Send, onClick: () => setSend(true) },
                   !draft && inv.kind !== 'rectifying' && inv.status !== 'cancelled' && can('invoices.issue') && { label: 'Crear rectificativa', icon: Undo2, onClick: () => setRectify(true) },
@@ -143,7 +143,7 @@ export default function InvoiceDetail() {
             {inv.payments.length > 0 && (
               <ul className="mt-4 space-y-2">
                 {inv.payments.map((p) => (
-                  <li key={p.id} className="flex items-center justify-between rounded-[12px] bg-white/55 px-3 py-2 text-[12.5px]">
+                  <li key={p.id} className="flex items-center justify-between rounded-[12px] bg-surface/55 px-3 py-2 text-[12.5px]">
                     <span>{date(p.paid_at)} · {PAYMENT_METHOD.label(p.method)}{p.external_ref && <span className="mono text-ink-soft"> · {p.external_ref}</span>}</span>
                     <span className="num font-medium">{money(p.amount_paid_cents)}</span>
                   </li>
@@ -166,7 +166,7 @@ export default function InvoiceDetail() {
             ) : inv.record_hash ? (
               <div className="space-y-2 text-[12px]">
                 <p className="text-ink-soft">Huella del registro</p>
-                <p className="mono break-all rounded-[10px] bg-white/60 p-2 text-[11px]">{inv.record_hash}</p>
+                <p className="mono break-all rounded-[10px] bg-surface/60 p-2 text-[11px]">{inv.record_hash}</p>
                 <p className="text-ink-soft">Huella anterior: <span className="mono">{inv.prev_record_hash ? `${inv.prev_record_hash.slice(0, 16)}…` : 'primer registro'}</span></p>
                 <p className="text-ink-soft">Emitida {dateTime(inv.issued_at)}</p>
               </div>

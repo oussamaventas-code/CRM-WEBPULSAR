@@ -182,7 +182,7 @@ export function FormModal({ open, onClose, title, subtitle, icon, fields, initia
         <FormFields fields={fields} values={values} setValues={setValues} errors={errors} />
         {children?.(values, setValues)}
         {(formError || unknownFieldErrors.length > 0) && (
-          <p className="mt-4 rounded-xl bg-danger-soft px-3 py-2 text-[12.5px] text-[#9F1D23]">{formError ?? unknownFieldErrors.map(([k, v]) => `${k}: ${v}`).join(' · ')}</p>
+          <p className="mt-4 rounded-xl bg-danger-soft px-3 py-2 text-[12.5px] text-danger-ink">{formError ?? unknownFieldErrors.map(([k, v]) => `${k}: ${v}`).join(' · ')}</p>
         )}
         <button type="submit" className="hidden" />
       </form>

@@ -7,6 +7,19 @@
     <meta name="robots" content="noindex, nofollow" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Web Pulsar</title>
+    <script>
+      // Aplica el tema antes del primer pintado para evitar el parpadeo claro → oscuro.
+      (function () {
+        try {
+          var m = localStorage.getItem('wp-theme');
+          var dark = m === 'dark' || ((m !== 'light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.style.colorScheme = 'dark';
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

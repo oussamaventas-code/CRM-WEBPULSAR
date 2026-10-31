@@ -122,7 +122,7 @@ export default function IncidentDetail() {
                       <p className="text-[12.5px] text-ink-soft">
                         <span className="font-medium text-ink">{e.user_name ?? 'Sistema'}</span> {describe(e)} · {relative(e.created_at)}
                       </p>
-                      {e.body && <p className={cx('mt-1 whitespace-pre-line text-[13px]', e.type === 'comment' && 'rounded-[14px] bg-white/70 px-3 py-2')}>{e.body}</p>}
+                      {e.body && <p className={cx('mt-1 whitespace-pre-line text-[13px]', e.type === 'comment' && 'rounded-[14px] bg-surface/70 px-3 py-2')}>{e.body}</p>}
                     </div>
                   </li>
                 );

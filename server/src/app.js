@@ -21,6 +21,8 @@ import incidentRoutes from './routes/incidents.js';
 import testimonialRoutes from './routes/testimonials.js';
 import adminRoutes from './routes/admin.js';
 import dashboardRoutes from './routes/dashboard.js';
+import dealRoutes from './routes/deals.js';
+import githubRoutes from './routes/github.js';
 
 export function createApp() {
   const app = express();
@@ -44,6 +46,8 @@ export function createApp() {
   api.use('/', dashboardRoutes);
   api.use('/clients', clientRoutes);
   api.use('/projects', projectRoutes);
+  api.use('/deals', dealRoutes);
+  api.use('/github', githubRoutes);
   api.use('/tasks', taskRouter);
   api.use('/services', serviceRoutes);
   api.use('/client-services', clientServiceRouter);

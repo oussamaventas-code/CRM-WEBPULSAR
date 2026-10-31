@@ -22,7 +22,7 @@ function NavItems({ collapsed, counts, onNavigate }) {
               cx(
                 'group relative flex items-center gap-3 rounded-[14px] px-3 py-2.5 text-[13.5px] font-medium transition-all duration-200',
                 collapsed && 'justify-center px-0',
-                isActive ? 'bg-white text-brand-deep shadow-[0_1px_2px_rgba(23,32,51,0.06),0_6px_16px_-8px_rgba(23,59,114,0.25)]' : 'text-ink-soft hover:bg-white/60 hover:text-ink',
+                isActive ? 'bg-surface text-brand-deep shadow-[0_1px_2px_rgba(23,32,51,0.06),0_6px_16px_-8px_rgba(23,59,114,0.25)]' : 'text-ink-soft hover:bg-surface/60 hover:text-ink',
               )
             }
           >
@@ -33,7 +33,7 @@ function NavItems({ collapsed, counts, onNavigate }) {
                 {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
                 {count > 0 &&
                   (collapsed ? (
-                    <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-danger ring-2 ring-white" />
+                    <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-danger ring-2 ring-surface" />
                   ) : (
                     <span className="num rounded-full bg-danger px-1.5 text-[10.5px] font-medium text-white">{count}</span>
                   ))}
@@ -50,11 +50,11 @@ function ProfileCard({ collapsed }) {
   const { user, logout, expiresAt } = useAuth();
   const expires = expiresAt ? new Intl.DateTimeFormat('es-ES', { hour: '2-digit', minute: '2-digit' }).format(new Date(expiresAt)) : null;
   return (
-    <div className={cx('rounded-[18px] border border-white/80 bg-white/55 p-2.5', collapsed && 'flex flex-col items-center gap-2 px-1.5')}>
+    <div className={cx('rounded-[18px] border border-surface/80 bg-surface/55 p-2.5', collapsed && 'flex flex-col items-center gap-2 px-1.5')}>
       <div className={cx('flex items-center gap-2.5', collapsed && 'flex-col')}>
         <div className="relative">
           <Avatar name={user?.name} size={34} />
-          <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-white p-[2px]">
+          <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-surface p-[2px]">
             <Dot tone="ok" />
           </span>
         </div>

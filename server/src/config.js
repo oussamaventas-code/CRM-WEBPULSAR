@@ -40,6 +40,7 @@ export const config = {
   },
   schedulerEnabled: env.SCHEDULER_ENABLED !== '0',
   backups: { keep: Number(env.BACKUP_KEEP || 14), hour: Number(env.BACKUP_HOUR || 3) },
+  githubToken: env.GITHUB_TOKEN || null,
   envSecrets: {
     hostinger: env.HOSTINGER_API_TOKEN || null,
     cloudflare: env.CLOUDFLARE_API_TOKEN || null,
