@@ -21,6 +21,20 @@ if (!fs.existsSync(envPath)) {
   }
 }
 
+// Claves VAPID para notificaciones push (se generan una sola vez).
+{
+  const content = fs.readFileSync(envPath, 'utf8');
+  if (/^VAPID_PUBLIC_KEY=\s*$/m.test(content) || !/^VAPID_PUBLIC_KEY=/m.test(content)) {
+    const webpush = (await import('web-push')).default;
+    const keys = webpush.generateVAPIDKeys();
+    let next = content.replace(/^VAPID_PUBLIC_KEY=.*$/m, '').replace(/^VAPID_PRIVATE_KEY=.*$/m, '').trimEnd();
+    next += `\nVAPID_PUBLIC_KEY=${keys.publicKey}\nVAPID_PRIVATE_KEY=${keys.privateKey}\n`;
+    if (!/^VAPID_SUBJECT=/m.test(next)) next += 'VAPID_SUBJECT=mailto:admin@localhost.invalid\n';
+    fs.writeFileSync(envPath, next);
+    console.log('✓ Claves VAPID generadas en .env (notificaciones push). Cambia VAPID_SUBJECT por tu email.');
+  }
+}
+
 const { migrate } = await import('../src/db/migrate.js');
 const { syncRbac } = await import('../src/auth/rbac.js');
 const { db } = await import('../src/db/index.js');

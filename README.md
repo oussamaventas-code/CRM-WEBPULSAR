@@ -80,7 +80,7 @@ Para métricas en tiempo real y heartbeat propio, genera un token en la ficha de
 
 ## Novedades de la rama `ayoub/dark-mode-y-extras`
 
-Tres añadidos que **no modifican el esquema ni los datos existentes** (la migración `006` solo crea una tabla y dos columnas opcionales). Todo sigue funcionando igual si no se usan.
+Cinco añadidos que **no modifican el esquema ni los datos existentes** (las migraciones `006` y `007` solo crean tablas nuevas y dos columnas opcionales). Todo sigue funcionando igual si no se usan.
 
 ### 1. Modo oscuro (claro · oscuro · sistema)
 
@@ -114,9 +114,29 @@ Tres añadidos que **no modifican el esquema ni los datos existentes** (la migra
   - API: `server/src/routes/github.js` en `/api/github/activity` (`?project_id=` o `?client_id=`); campos validados en `server/src/routes/projects.js`; `GITHUB_TOKEN` en `server/src/config.js` y `.env.example`.
   - Interfaz: `web/src/pages/development/DevelopmentPage.jsx`, `web/src/components/GithubActivity.jsx`, pestaña en `web/src/pages/projects/ProjectDetail.jsx`, y los dos campos en `projectFields` de `web/src/forms.js`.
 
+### 4. Avisos de cobros en el móvil (PWA + notificaciones push)
+
+- **Qué hace:** la web se puede instalar en el móvil como app («Web Pulsar») y avisa con una notificación del sistema cuando hay un cobro vencido, una factura o mensualidad próxima a vencer, una oportunidad ganada, etc. Al tocar el aviso se abre la pantalla correspondiente.
+- **Cómo se activa (cada socio, en cada dispositivo):** abre la web desde el móvil → campana → **«Activar avisos en el móvil»** → aceptar el permiso. El botón **Probar** envía una notificación de prueba.
+  - **Android/Chrome:** funciona desde el navegador; mejor instalarla («Añadir a pantalla de inicio»).
+  - **iPhone/iPad (iOS 16.4+):** hay que instalarla primero (Compartir → «Añadir a pantalla de inicio») y abrirla desde el icono.
+  - **Requisito:** HTTPS en producción (el dominio de Cloudflare/Nginx ya lo cumple). En local solo funciona en `localhost`.
+- **Cómo funciona:** cada aviso interno nuevo (`notify()`) se envía además por Web Push a los dispositivos suscritos de sus destinatarios. Los avisos repetidos (misma `dedupe_key`) no vuelven a sonar. Los recordatorios de cobros ya existían y los genera el planificador; se controlan con el interruptor «Recordatorio de cobros» en Configuración → Monitorización y avisos. Los dispositivos dados de baja se limpian solos.
+- **Dónde:**
+  - Claves: `npm run setup` genera `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` en `.env` (cambia `VAPID_SUBJECT` por tu email). Si ya tenías `.env`, vuelve a ejecutar `npm run setup`.
+  - Base de datos: `server/migrations/007_push.sql` (`push_subscriptions`).
+  - API: `server/src/routes/push.js` (`/api/push/status|subscribe|unsubscribe|test`), envío en `server/src/services/push.js`, enganche en `server/src/lib/notify.js`.
+  - Interfaz: `web/public/sw.js` (service worker, no cachea nada), `web/public/manifest.webmanifest`, iconos, `web/src/lib/push.js`, `web/src/layout/PushToggle.jsx` (dentro de la campana de `Topbar.jsx`).
+
+### 5. Facturas en PDF con logo
+
+- **Qué hace:** en Configuración → Empresa hay una tarjeta **«Logo de las facturas»** para subir (PNG o JPG, máx. 2 MB), cambiar o quitar el logo. Aparece en la cabecera del PDF, encima del nombre comercial (se cambia en «Nombre comercial») y de los datos fiscales. Sin logo, la factura sale como antes. El PDF ya existía (Facturación → factura → PDF); solo se ha añadido el logo.
+- **Cómo:** el servidor comprueba la cabecera real del archivo (no se acepta SVG ni otros formatos, pdfkit solo admite PNG/JPG), lo guarda en `data/uploads/branding/` y `renderInvoicePdf` lo dibuja. El logo se aplica al descargar o enviar cualquier factura, también las ya emitidas.
+- **Dónde:** `server/src/routes/branding.js` (`/api/branding/logo`), cabecera del PDF en `server/src/services/invoices.js`, interfaz en `web/src/pages/settings/LogoCard.jsx` (usada desde `SettingsPage.jsx`).
+
 ### Tests
 
-`server/test/sales.test.js` cubre la validación del repo de GitHub, las restricciones de `deals`, los permisos por rol y la carga/borrado de DEMO. `npm test` → 15 pruebas.
+`server/test/sales.test.js` y `server/test/push-branding.test.js`: validación del repo de GitHub, restricciones de `deals`, permisos, DEMO, detección de imágenes, PDF con y sin logo y push desactivado sin claves. `npm test` → 18 pruebas.
 
 ## Documentación
 

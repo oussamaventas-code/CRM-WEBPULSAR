@@ -1,3 +1,4 @@
+import { LogoCard } from './LogoCard.jsx';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -474,7 +475,7 @@ export default function SettingsPage() {
         <Skeleton className="h-80 rounded-card" />
       ) : (
         <>
-          {tab === 'empresa' && <SettingsForm settingKey="company" title="Datos de la empresa" icon={Building2} fields={companyFields} data={settings.company} notice={<Notice tone="brand">Estos datos aparecen en las facturas como emisor. Son obligatorios para emitir.</Notice>} />}
+          {tab === 'empresa' && <div className="space-y-4"><LogoCard /><SettingsForm settingKey="company" title="Datos de la empresa" icon={Building2} fields={companyFields} data={settings.company} notice={<Notice tone="brand">Estos datos aparecen en las facturas como emisor. Son obligatorios para emitir.</Notice>} /></div>}
           {tab === 'facturacion' && <InvoicingTab settings={settings} />}
           {tab === 'usuarios' && <UsersTab />}
           {tab === 'integraciones' && <IntegrationsPanel />}

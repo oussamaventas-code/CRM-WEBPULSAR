@@ -1,4 +1,5 @@
 import { db } from '../db/index.js';
+import { sendPush } from '../services/push.js';
 
 /**
  * Crea una notificación interna para cada usuario activo (o los indicados).
@@ -7,6 +8,7 @@ import { db } from '../db/index.js';
 export function notify({ userIds, excludeUserId, type, title, body = null, severity = 'info', entityType = null, entityId = null, link = null, dedupeKey = null }) {
   const targets = userIds?.length ? userIds : db.all("SELECT id FROM users WHERE status = 'active'").map((u) => u.id);
   let created = 0;
+  const notified = [];
   for (const userId of targets) {
     if (userId === excludeUserId) continue;
     const res = db.run(
@@ -14,7 +16,10 @@ export function notify({ userIds, excludeUserId, type, title, body = null, sever
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [userId, type, title, body, severity, entityType, entityId, link, dedupeKey],
     );
+    if (Number(res.changes)) notified.push(userId);
     created += Number(res.changes);
   }
+  // Push al móvil solo para avisos nuevos (los repetidos por dedupe_key no vuelven a sonar).
+  if (notified.length) sendPush(notified, { title, body: body ?? '', link: link ?? '/', tag: dedupeKey ?? type }).catch(() => {});
   return created;
 }

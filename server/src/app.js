@@ -23,6 +23,8 @@ import adminRoutes from './routes/admin.js';
 import dashboardRoutes from './routes/dashboard.js';
 import dealRoutes from './routes/deals.js';
 import githubRoutes from './routes/github.js';
+import pushRoutes from './routes/push.js';
+import brandingRoutes from './routes/branding.js';
 
 export function createApp() {
   const app = express();
@@ -48,6 +50,8 @@ export function createApp() {
   api.use('/projects', projectRoutes);
   api.use('/deals', dealRoutes);
   api.use('/github', githubRoutes);
+  api.use('/push', pushRoutes);
+  api.use('/branding', brandingRoutes);
   api.use('/tasks', taskRouter);
   api.use('/services', serviceRoutes);
   api.use('/client-services', clientServiceRouter);
@@ -65,7 +69,7 @@ export function createApp() {
 
   // Frontend compilado (producción)
   if (fs.existsSync(path.join(config.webDist, 'index.html'))) {
-    app.use(express.static(config.webDist, { index: false, maxAge: '1y', immutable: true, setHeaders: (res, file) => file.endsWith('.html') && res.setHeader('Cache-Control', 'no-cache') }));
+    app.use(express.static(config.webDist, { index: false, maxAge: '1y', immutable: true, setHeaders: (res, file) => /\.html$|sw\.js$|manifest\.webmanifest$/.test(file) && res.setHeader('Cache-Control', 'no-cache') }));
     app.get('/{*splat}', (_req, res) => {
       res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(path.join(config.webDist, 'index.html'));

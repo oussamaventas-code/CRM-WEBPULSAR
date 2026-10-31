@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, CreditCard, FolderKanban, Menu as MenuIcon, Monitor, Moon, Plug, Plus, Receipt, Search, Server, Sun, TriangleAlert, UserPlus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useTheme } from '../context/ThemeContext.jsx';
+import { PushToggle } from './PushToggle.jsx';
 import { useQuickActions } from './QuickActions.jsx';
 import { Avatar, Dot, Menu, cx } from '../components/ui.jsx';
 import { api } from '../lib/api.js';
@@ -71,6 +72,7 @@ function Notifications() {
               ))
             )}
           </div>
+          <PushToggle />
         </div>
       )}
     </div>
