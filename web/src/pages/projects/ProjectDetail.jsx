@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Activity, AppWindow, CalendarRange, Database, FileText, FolderKanban, Globe, ListTodo, MessageSquare, MoreHorizontal, Pencil, Plus, Receipt, Send, Server, Trash2, User, Wallet } from 'lucide-react';
+import { Activity, AppWindow, GitBranch, CalendarRange, Database, FileText, FolderKanban, Globe, ListTodo, MessageSquare, MoreHorizontal, Pencil, Plus, Receipt, Send, Server, Trash2, User, Wallet } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
 import { api, emitRefresh } from '../../lib/api.js';
@@ -14,6 +14,7 @@ import { Avatar, Badge, Button, DemoTag, EmptyState, ErrorState, Glass, IconButt
 import { DocumentsPanel, DueDate, InvoicesTable, PaymentsTable } from '../../components/lists.jsx';
 import { Timeline } from '../../components/Timeline.jsx';
 import { HealthPill } from '../../components/Health.jsx';
+import { NoReposState, RepoCard } from '../../components/GithubActivity.jsx';
 
 const TASK_COLUMNS = ['todo', 'in_progress', 'review', 'done'];
 
@@ -85,7 +86,7 @@ function TaskModal({ task, projectId, onClose }) {
             {(comments.data ?? []).map((c) => (
               <li key={c.id} className="flex gap-3">
                 <Avatar name={c.user_name} size={28} />
-                <div className="min-w-0 flex-1 rounded-[14px] bg-white/70 px-3 py-2">
+                <div className="min-w-0 flex-1 rounded-[14px] bg-surface/70 px-3 py-2">
                   <p className="text-[11.5px] text-ink-soft">{c.user_name} · {relative(c.created_at)}</p>
                   <p className="whitespace-pre-line text-[13px]">{c.body}</p>
                 </div>
@@ -173,7 +174,7 @@ function TasksBoard({ projectId }) {
                       draggable={can('projects.write')}
                       onDragStart={() => setDragging(t)}
                       onClick={() => setOpen(t)}
-                      className="lift rounded-[14px] border border-white/90 bg-white/85 p-3 text-left shadow-[0_1px_2px_rgba(23,32,51,0.05)]"
+                      className="lift rounded-[14px] border border-surface/90 bg-surface/85 p-3 text-left shadow-[0_1px_2px_rgba(23,32,51,0.05)]"
                     >
                       <p className={cx('text-[13px] font-medium leading-snug', t.status === 'done' && 'text-ink-soft line-through decoration-ink-faint')}>{t.title}</p>
                       <div className="mt-2.5 flex items-center gap-2">
@@ -207,6 +208,7 @@ export default function ProjectDetail() {
   const lk = useLookups(['clients', 'users']);
   const { data, error, reload } = useApi(`/projects/${id}`);
   const history = useApi(tab === 'historial' ? `/projects/${id}/history` : null);
+  const github = useApi(tab === 'desarrollo' ? '/github/activity' : null, { project_id: id });
   const [edit, setEdit] = useState(false);
   const [remove, setRemove] = useState(false);
 
@@ -229,6 +231,7 @@ export default function ProjectDetail() {
     { key: 'archivos', label: 'Archivos', icon: FileText, count: data.documents_count },
     can('finance.read') && { key: 'finanzas', label: 'Finanzas', icon: Wallet },
     can('infrastructure.read') && { key: 'infraestructura', label: 'Infraestructura', icon: Server },
+    p.github_repo && { key: 'desarrollo', label: 'Desarrollo', icon: GitBranch },
     { key: 'historial', label: 'Historial', icon: Activity },
   ].filter(Boolean);
 
@@ -259,7 +262,7 @@ export default function ProjectDetail() {
               />
               <Button variant="secondary" icon={Pencil} onClick={() => setEdit(true)}>Editar</Button>
               {can('projects.delete') && (
-                <Menu trigger={({ toggle }) => <IconButton icon={MoreHorizontal} label="Más" onClick={toggle} className="border border-line bg-white/70" />} items={[{ label: 'Eliminar proyecto', icon: Trash2, danger: true, onClick: () => setRemove(true) }]} />
+                <Menu trigger={({ toggle }) => <IconButton icon={MoreHorizontal} label="Más" onClick={toggle} className="border border-line bg-surface/70" />} items={[{ label: 'Eliminar proyecto', icon: Trash2, danger: true, onClick: () => setRemove(true) }]} />
               )}
             </>
           )
@@ -337,6 +340,9 @@ export default function ProjectDetail() {
             </Section>
           ))}
         </div>
+      )}
+      {tab === 'desarrollo' && (
+        github.data?.items?.[0] ? <RepoCard entry={github.data.items[0]} showProject={false} onOpen={(e, c, tab) => navigate(`/trabajo?proyecto=${e.project.id}&cambio=${c.sha}${tab === 'preview' ? '&tab=preview' : ''}`)} /> : github.loading ? <Skeleton className="h-64 rounded-card" /> : <Glass><NoReposState canWrite={can('projects.write')} /></Glass>
       )}
       {tab === 'historial' && (
         <Section title="Historial del proyecto" icon={Activity}>

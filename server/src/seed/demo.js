@@ -122,6 +122,15 @@ export function loadDemoData(ctx) {
 
     add('testimonials', { client_id: c1, received_at: addDays(t, -20), service_id: services.web, project_id: p1, channel: 'call', internal_notes: '[DEMO] Ejemplo ficticio de nota interna. No corresponde a ningún cliente real.', status: 'pending_draft', created_by: uid });
 
+    const deal = (title, stage, valueCents, extra = {}) =>
+      add('deals', { title: `[DEMO] ${title}`, stage, value_cents: valueCents, probability: { lead: 10, contacted: 25, proposal: 50, negotiation: 75, won: 100, lost: 0 }[stage], owner_user_id: uid, source: 'Datos de demostración', created_by: uid, notes: 'Oportunidad ficticia de demostración.', ...extra });
+    deal('Web para gimnasio Pulso', 'lead', 30000, { company: '[DEMO] Gimnasio Pulso', expected_close_date: addDays(t, 30) });
+    deal('Automatización de reservas', 'contacted', 120000, { company: '[DEMO] Peluquería Brillo', recurring_cents: 4000, expected_close_date: addDays(t, 21) });
+    deal('Tienda online Café Meridiano', 'proposal', 180000, { client_id: c4, expected_close_date: addDays(t, 14), next_action: 'Enviar propuesta revisada', next_action_date: addDays(t, 2) });
+    deal('CRM a medida Talleres Órbita', 'negotiation', 680000, { client_id: c2, recurring_cents: 9000, expected_close_date: addDays(t, 10) });
+    deal('Web corporativa Estudio Nébula', 'won', 240000, { client_id: c1, created_at: addDays(t, -75) + 'T10:00:00.000Z', closed_at: addDays(t, -40) + 'T10:00:00.000Z' });
+    deal('Landing para academia', 'lost', 30000, { company: '[DEMO] Academia Norte', lost_reason: 'Eligieron una plantilla gratuita', created_at: addDays(t, -30) + 'T10:00:00.000Z', closed_at: addDays(t, -9) + 'T10:00:00.000Z' });
+
     for (const [action, summary, clientId] of [
       ['client.created', 'Nuevo cliente: [DEMO] Café Meridiano', c4],
       ['project.created', 'Proyecto creado: [DEMO] Tienda online', c4],
@@ -160,7 +169,8 @@ export function clearDemoData(ctx) {
             (SELECT COUNT(*) FROM payments WHERE is_demo = 0 AND client_id IN (${demoClients})) +
             (SELECT COUNT(*) FROM recurring_payments WHERE is_demo = 0 AND client_id IN (${demoClients})) +
             (SELECT COUNT(*) FROM incidents WHERE is_demo = 0 AND client_id IN (${demoClients})) +
-            (SELECT COUNT(*) FROM testimonials WHERE is_demo = 0 AND client_id IN (${demoClients})) AS n`,
+            (SELECT COUNT(*) FROM testimonials WHERE is_demo = 0 AND client_id IN (${demoClients})) +
+            (SELECT COUNT(*) FROM deals WHERE is_demo = 0 AND client_id IN (${demoClients})) AS n`,
   ).n;
   if (real > 0) throw conflict(`Hay ${real} registros reales vinculados a clientes DEMO. Reasígnalos o elimínalos antes de borrar los datos de demostración.`);
 
@@ -183,6 +193,7 @@ export function clearDemoData(ctx) {
     out.databases = del('DELETE FROM databases WHERE is_demo = 1');
     out.domains = del('DELETE FROM domains WHERE is_demo = 1');
     out.servers = del('DELETE FROM servers WHERE is_demo = 1');
+    out.deals = del('DELETE FROM deals WHERE is_demo = 1');
     out.projects = del('DELETE FROM projects WHERE is_demo = 1');
     out.clients = del('DELETE FROM clients WHERE is_demo = 1');
     out.services = del('DELETE FROM services WHERE is_demo = 1');

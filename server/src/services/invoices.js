@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { logoPath } from '../routes/branding.js';
 import { db, nowIso, tx } from '../db/index.js';
 import { computeInvoice, formatInvoiceNumber } from '../lib/money.js';
 import { getSetting } from '../lib/settings.js';
@@ -206,12 +207,24 @@ export function renderInvoicePdf(inv) {
     doc.save().rotate(-30, { origin: [300, 420] }).fontSize(70).fillColor('#E5484D').opacity(0.08).text('BORRADOR', 80, 380, { width: 450, align: 'center' }).restore().opacity(1);
   }
 
-  doc.fillColor(blue).font('Helvetica-Bold').fontSize(18).text(company.trade_name || company.name || 'Web Pulsar', 50, 50);
+  // Logo opcional (Configuración → Empresa). Si falla la lectura, la factura sale igual sin logo.
+  const logo = logoPath();
+  let headerY = 50;
+  if (logo) {
+    try {
+      doc.image(logo, 50, 42, { fit: [170, 60] });
+      headerY = 112;
+    } catch {
+      headerY = 50;
+    }
+  }
+  doc.fillColor(blue).font('Helvetica-Bold').fontSize(18).text(company.trade_name || company.name || 'Web Pulsar', 50, headerY);
   doc.font('Helvetica').fontSize(9).fillColor(soft);
   [company.name !== company.trade_name ? company.name : null, company.tax_id ? `NIF ${company.tax_id}` : null, company.address, [company.postal_code, company.city, company.province].filter(Boolean).join(' '), company.country, [company.email, company.phone].filter(Boolean).join(' · ')]
     .filter(Boolean)
     .forEach((l) => doc.text(l, { width: 260 }));
 
+  const headerBottom = doc.y;
   const title = inv.status === 'draft' ? 'BORRADOR' : inv.kind === 'rectifying' ? 'FACTURA RECTIFICATIVA' : 'FACTURA';
   doc.font('Helvetica-Bold').fontSize(16).fillColor('#172033').text(title, 330, 50, { width: 215, align: 'right' });
   doc.font('Helvetica').fontSize(10).fillColor(soft);
@@ -220,7 +233,7 @@ export function renderInvoicePdf(inv) {
   doc.text(`Vencimiento: ${dateEs(inv.due_date)}`, { width: 215, align: 'right' });
   if (inv.rectifies_number) doc.text(`Rectifica: ${inv.rectifies_number}`, { width: 215, align: 'right' });
 
-  const boxY = 170;
+  const boxY = Math.max(170, headerBottom + 14);
   doc.roundedRect(50, boxY, W, 86, 10).fillAndStroke('#F5F8FC', line);
   doc.fillColor(soft).fontSize(8).text('FACTURAR A', 64, boxY + 12);
   doc.fillColor('#172033').font('Helvetica-Bold').fontSize(11).text(client?.name ?? '', 64, boxY + 24, { width: W - 28 });

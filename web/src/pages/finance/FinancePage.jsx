@@ -65,7 +65,7 @@ function SummaryTab() {
               {data.expenses_by_category.map((c) => (
                 <li key={c.category}>
                   <div className="mb-1 flex justify-between text-[12.5px]"><span>{EXPENSE_CATEGORY.label(c.category)}</span><span className="num font-medium">{money(c.amount_cents)}</span></div>
-                  <div className="h-2 overflow-hidden rounded-full bg-[#EEF2F7]"><div className="h-full rounded-full bg-[#8067E8]" style={{ width: `${(c.amount_cents / maxCat) * 100}%` }} /></div>
+                  <div className="h-2 overflow-hidden rounded-full bg-track"><div className="h-full rounded-full bg-[#8067E8]" style={{ width: `${(c.amount_cents / maxCat) * 100}%` }} /></div>
                 </li>
               ))}
             </ul>
@@ -156,7 +156,7 @@ function ExpensesTab({ formOpen, setFormOpen }) {
         }}
       >
         {() => (
-          <label className="mt-4 flex cursor-pointer items-center gap-3 rounded-[14px] border border-dashed border-line bg-white/60 px-4 py-3 hover:bg-brand-ice/40">
+          <label className="mt-4 flex cursor-pointer items-center gap-3 rounded-[14px] border border-dashed border-line bg-surface/60 px-4 py-3 hover:bg-brand-ice/40">
             <Upload className="h-4 w-4 text-brand" />
             <span className="flex-1 text-[12.5px]">{file ? `${file.name} · ${bytes(file.size)}` : 'Adjuntar documento justificante (opcional)'}</span>
             <input type="file" className="sr-only" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />

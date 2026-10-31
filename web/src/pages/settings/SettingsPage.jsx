@@ -1,3 +1,4 @@
+import { LogoCard } from './LogoCard.jsx';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -196,7 +197,7 @@ function UsersTab() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             {roles.data.roles.map((r) => (
-              <div key={r.key} className="rounded-[16px] border border-white/80 bg-white/55 p-4">
+              <div key={r.key} className="rounded-[16px] border border-surface/80 bg-surface/55 p-4">
                 <div className="flex items-center justify-between"><LabelBadge set={ROLE} value={r.key} dot={false} /><span className="text-[11.5px] text-ink-soft">{r.users} usuarios</span></div>
                 <p className="mt-2 text-[12.5px] text-ink-soft">{r.description}</p>
                 <p className="mt-2 text-[11.5px] text-ink-faint">{r.permissions.length} de {roles.data.permissions.length} permisos</p>
@@ -245,7 +246,7 @@ function UsersTab() {
       />
       <Modal open={!!link} onClose={() => setLink(null)} title="Enlace para establecer contraseña" icon={KeyRound} size="md" footer={<Button onClick={() => setLink(null)}>Hecho</Button>}>
         <Notice tone="warn">Envíaselo a {link?.name} por un canal seguro. Caduca en {link?.expires_minutes} minutos y solo se muestra ahora.</Notice>
-        <div className="mt-4 flex items-center gap-2 rounded-[14px] border border-line bg-white px-3 py-2.5">
+        <div className="mt-4 flex items-center gap-2 rounded-[14px] border border-line bg-surface px-3 py-2.5">
           <code className="mono flex-1 truncate text-[12px]">{link?.url}</code>
           <IconButton icon={Copy} label="Copiar enlace" onClick={async () => { await navigator.clipboard.writeText(link.url); toast.success('Enlace copiado'); }} />
         </div>
@@ -276,6 +277,7 @@ const automationFields = [
   { name: 'alert_to_incident', type: 'switch', label: 'Incidencias', switchLabel: 'Crear incidencia automáticamente desde alertas críticas', span: 2 },
   { name: 'project_status_change', type: 'switch', label: 'Proyectos', switchLabel: 'Notificar cuando un proyecto cambie de estado', span: 2 },
   { name: 'task_reminders', type: 'switch', label: 'Tareas', switchLabel: 'Recordar tareas próximas o vencidas a su responsable', span: 2 },
+  { name: 'email_notifications', type: 'switch', label: 'Correo', switchLabel: 'Enviar también cada aviso por email a los socios (requiere correo saliente)', span: 2 },
   { name: 'integration_sync_hours', label: 'Sincronizar integraciones cada (horas, 0 = manual)', type: 'number' },
 ];
 
@@ -474,14 +476,14 @@ export default function SettingsPage() {
         <Skeleton className="h-80 rounded-card" />
       ) : (
         <>
-          {tab === 'empresa' && <SettingsForm settingKey="company" title="Datos de la empresa" icon={Building2} fields={companyFields} data={settings.company} notice={<Notice tone="brand">Estos datos aparecen en las facturas como emisor. Son obligatorios para emitir.</Notice>} />}
+          {tab === 'empresa' && <div className="space-y-4"><LogoCard /><SettingsForm settingKey="company" title="Datos de la empresa" icon={Building2} fields={companyFields} data={settings.company} notice={<Notice tone="brand">Estos datos aparecen en las facturas como emisor. Son obligatorios para emitir.</Notice>} /></div>}
           {tab === 'facturacion' && <InvoicingTab settings={settings} />}
           {tab === 'usuarios' && <UsersTab />}
           {tab === 'integraciones' && <IntegrationsPanel />}
           {tab === 'monitorizacion' && (
             <div className="grid gap-6 xl:grid-cols-2">
               <SettingsForm settingKey="monitoring" title="Umbrales de monitorización" icon={HeartPulse} fields={monitoringFields} data={settings.monitoring} />
-              <SettingsForm settingKey="automations" title="Automatizaciones y avisos" icon={Bell} fields={automationFields} data={settings.automations} notice={<Notice tone="brand">Los avisos aparecen como notificaciones dentro del CRM. El envío por email se activará con el correo saliente configurado.</Notice>} />
+              <SettingsForm settingKey="automations" title="Automatizaciones y avisos" icon={Bell} fields={automationFields} data={settings.automations} notice={<Notice tone="brand">Los avisos aparecen en el CRM y en el móvil (si has activado las notificaciones). Con el correo saliente configurado también se envían por email.</Notice>} />
             </div>
           )}
           {tab === 'cuenta' && <AccountTab />}

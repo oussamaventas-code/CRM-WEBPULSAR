@@ -127,7 +127,7 @@ export function ConfirmDialog({ open, onClose, title, message, confirmLabel = 'C
             <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
           </Field>
         )}
-        {error && !error.fields?.password && !error.fields?.confirm_name && <p className="rounded-xl bg-danger-soft px-3 py-2 text-[12.5px] text-[#9F1D23]">{error.message}</p>}
+        {error && !error.fields?.password && !error.fields?.confirm_name && <p className="rounded-xl bg-danger-soft px-3 py-2 text-[12.5px] text-danger-ink">{error.message}</p>}
         <button type="submit" className="hidden" />
       </form>
     </Modal>

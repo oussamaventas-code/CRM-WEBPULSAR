@@ -37,7 +37,7 @@ function SummaryTab({ go }) {
         {cards.map(([label, Icon, counts, tab]) => (
           <button key={label} onClick={() => go(tab)} className="glass sheen lift p-5 text-left">
             <div className="flex items-center justify-between">
-              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-b from-brand-ice to-white text-brand"><Icon className="h-[19px] w-[19px]" /></span>
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-b from-brand-ice to-surface text-brand"><Icon className="h-[19px] w-[19px]" /></span>
               <span className="num text-[26px] font-medium">{int(counts.total)}</span>
             </div>
             <p className="mb-3 mt-3 text-[13px] font-medium">{label}</p>
@@ -72,7 +72,7 @@ function SummaryTab({ go }) {
         <Section title="Integraciones" icon={Plug} actions={<button className="btn-ghost btn-sm" onClick={() => go('integraciones')}>Gestionar</button>}>
           <ul className="space-y-2.5">
             {(integrations.data?.items ?? []).map((i) => (
-              <li key={i.key} className="flex items-center justify-between gap-2 rounded-[14px] bg-white/55 px-3 py-2.5">
+              <li key={i.key} className="flex items-center justify-between gap-2 rounded-[14px] bg-surface/55 px-3 py-2.5">
                 <span className="flex items-center gap-2 text-[13px] font-medium">{i.key === 'cloudflare' ? <Cloud className="h-4 w-4 text-brand" /> : i.key === 'hostinger' ? <Server className="h-4 w-4 text-brand" /> : <Plug className="h-4 w-4 text-brand" />}{i.name}</span>
                 <LabelBadge set={INTEGRATION_STATUS} value={i.status} />
               </li>
@@ -80,7 +80,7 @@ function SummaryTab({ go }) {
           </ul>
           <div className="mt-4 grid grid-cols-3 gap-2 text-center">
             {[['Comprobaciones', data.checks.total], ['Correctas', data.checks.up], ['Fallando', data.checks.down]].map(([l, v]) => (
-              <div key={l} className="rounded-[12px] bg-white/45 py-2"><p className="num text-[16px] font-medium">{int(v)}</p><p className="text-[10.5px] text-ink-soft">{l}</p></div>
+              <div key={l} className="rounded-[12px] bg-surface/45 py-2"><p className="num text-[16px] font-medium">{int(v)}</p><p className="text-[10.5px] text-ink-soft">{l}</p></div>
             ))}
           </div>
         </Section>

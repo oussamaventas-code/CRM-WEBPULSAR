@@ -1,6 +1,6 @@
 // Definiciones de formularios compartidas (alta rápida, edición y fichas).
 import {
-  BILLING_PERIOD, CLIENT_STATUS, DB_ENGINE, ENVIRONMENT, APP_KIND, INCIDENT_CATEGORY, INCIDENT_STATUS, PAYMENT_METHOD, PRIORITY, PROJECT_STATUS, PROJECT_TYPE, PROVIDER,
+  BILLING_PERIOD, DEAL_STAGE, CLIENT_STATUS, DB_ENGINE, ENVIRONMENT, APP_KIND, INCIDENT_CATEGORY, INCIDENT_STATUS, PAYMENT_METHOD, PRIORITY, PROJECT_STATUS, PROJECT_TYPE, PROVIDER,
   SERVICE_CATEGORY, SERVICE_MODALITY,
 } from './lib/labels.js';
 import { todayIso } from './lib/format.js';
@@ -40,7 +40,30 @@ export const projectFields = (lk = {}) => [
   { name: 'due_date', label: 'Entrega estimada', type: 'date' },
   { name: 'progress_mode', label: 'Cálculo del progreso', type: 'select', required: true, default: 'tasks', options: [{ value: 'tasks', label: 'Automático según tareas' }, { value: 'manual', label: 'Manual' }] },
   { name: 'progress', label: 'Progreso (%)', type: 'percent', show: (v) => v.progress_mode === 'manual' },
+  { name: 'github_repo', label: 'Repositorio de GitHub', mono: true, placeholder: 'owner/repositorio', hint: 'También admite la URL del repo. Activa la actividad en Desarrollo' },
+  { name: 'preview_url', label: 'URL de preview', type: 'url', placeholder: 'https://…' },
   { name: 'description', label: 'Descripción', type: 'textarea', span: 2 },
+];
+
+export const dealFields = (lk = {}) => [
+  { name: 'title', label: 'Oportunidad', required: true, span: 2, placeholder: 'Web corporativa para…' },
+  { name: 'stage', label: 'Etapa', type: 'select', options: DEAL_STAGE.options, required: true, default: 'lead' },
+  { name: 'client_id', label: 'Cliente existente', type: 'select', numeric: true, options: opt(lk.clients), hint: 'Déjalo vacío si aún es un contacto nuevo' },
+  { name: 'company', label: 'Empresa' },
+  { name: 'contact_name', label: 'Persona de contacto' },
+  { name: 'email', label: 'Email', type: 'email' },
+  { name: 'phone', label: 'Teléfono', type: 'tel' },
+  { name: 'value_cents', label: 'Valor del proyecto', type: 'money' },
+  { name: 'recurring_cents', label: 'Cuota mensual recurrente', type: 'money', hint: 'Mantenimiento, hosting o suscripción SaaS' },
+  { name: 'probability', label: 'Probabilidad (%)', type: 'percent', hint: 'Si lo dejas vacío se ajusta según la etapa' },
+  { name: 'expected_close_date', label: 'Cierre previsto', type: 'date' },
+  { name: 'owner_user_id', label: 'Responsable', type: 'select', numeric: true, options: opt(lk.users) },
+  { name: 'source', label: 'Origen', placeholder: 'Recomendación, web, WhatsApp…' },
+  { name: 'service_interest', label: 'Servicio de interés' },
+  { name: 'next_action', label: 'Próxima acción' },
+  { name: 'next_action_date', label: 'Fecha de la próxima acción', type: 'date' },
+  { name: 'lost_reason', label: 'Motivo de la pérdida', show: (v) => v.stage === 'lost', span: 2 },
+  { name: 'notes', label: 'Notas', type: 'textarea', span: 2 },
 ];
 
 export const taskFields = (lk = {}) => [

@@ -78,7 +78,7 @@ export default function DomainDetail() {
           can('infrastructure.write') && (
             <>
               <Button variant="secondary" icon={Pencil} onClick={() => setEdit(true)}>Editar</Button>
-              <Menu trigger={({ toggle }) => <IconButton icon={MoreHorizontal} label="Más" onClick={toggle} className="border border-line bg-white/70" />} items={[{ label: 'Eliminar del inventario', icon: Trash2, danger: true, onClick: () => setRemove(true) }]} />
+              <Menu trigger={({ toggle }) => <IconButton icon={MoreHorizontal} label="Más" onClick={toggle} className="border border-line bg-surface/70" />} items={[{ label: 'Eliminar del inventario', icon: Trash2, danger: true, onClick: () => setRemove(true) }]} />
             </>
           )
         }

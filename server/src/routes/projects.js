@@ -8,6 +8,7 @@ import { record } from '../lib/audit.js';
 import { notify } from '../lib/notify.js';
 import { getSetting } from '../lib/settings.js';
 import { sqlBilled, sqlCollected, sqlOutstanding } from '../services/finance.js';
+import { normalizeRepo } from './github.js';
 
 const router = Router();
 
@@ -38,6 +39,8 @@ const projectFields = {
   status: f.oneOf(PROJECT_STATUSES).default('quote'),
   progress: f.int(0, 100).optional(),
   progress_mode: f.oneOf(['tasks', 'manual']).default('tasks'),
+  github_repo: z.preprocess((v) => (v === '' || v === undefined ? null : v), z.string().trim().transform((v) => normalizeRepo(v)).refine(Boolean, 'Usa el formato owner/repositorio o la URL de GitHub').nullable()).optional(),
+  preview_url: f.url(),
 };
 const datesCheck = (d, ctx) => {
   if (d.start_date && d.due_date && d.due_date < d.start_date) ctx.addIssue({ code: 'custom', path: ['due_date'], message: 'La entrega no puede ser anterior al inicio' });

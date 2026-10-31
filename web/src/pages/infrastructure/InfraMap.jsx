@@ -14,7 +14,7 @@ const COLUMNS = [
   { type: 'cloudflare', label: 'Cloudflare', icon: Cloud },
   { type: 'database', label: 'Base de datos', icon: Database },
 ];
-const STATUS_RING = { operational: 'bg-ok', warning: 'bg-warn', down: 'bg-danger', unknown: 'bg-[#CBD5E1]' };
+const STATUS_RING = { operational: 'bg-ok', warning: 'bg-warn', down: 'bg-danger', unknown: 'bg-track' };
 const STATUS_TEXT = { operational: 'Operativo', warning: 'Advertencia', down: 'Incidencia', unknown: 'Sin verificar' };
 
 function linkFor(n) {
@@ -120,7 +120,7 @@ export function InfraMap() {
                     key={p.key}
                     d={p.d}
                     fill="none"
-                    stroke={lit ? '#2563EB' : '#B9C7DA'}
+                    stroke={lit ? 'rgb(var(--c-brand))' : 'rgb(var(--c-mute) / 0.6)'}
                     strokeWidth={lit ? 2 : 1.4}
                     strokeDasharray={p.kind !== 'fk' ? '4 4' : undefined}
                     opacity={connected && !lit ? 0.25 : 1}
@@ -147,8 +147,8 @@ export function InfraMap() {
                         onClick={() => navigate(linkFor(n))}
                         title={n.label}
                         className={cx(
-                          'relative z-[1] rounded-[14px] border bg-white/90 px-3 py-2 text-left shadow-[0_1px_2px_rgba(23,32,51,0.06)] transition-all duration-200',
-                          connected?.has(n.key) ? 'border-brand/40 shadow-[0_6px_16px_-8px_rgba(37,99,235,0.5)]' : 'border-white',
+                          'relative z-[1] rounded-[14px] border bg-surface/90 px-3 py-2 text-left shadow-[0_1px_2px_rgba(23,32,51,0.06)] transition-all duration-200',
+                          connected?.has(n.key) ? 'border-brand/40 shadow-[0_6px_16px_-8px_rgba(37,99,235,0.5)]' : 'border-surface',
                           connected && !connected.has(n.key) && 'opacity-40',
                         )}
                       >

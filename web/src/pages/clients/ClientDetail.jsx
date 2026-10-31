@@ -336,7 +336,7 @@ function FinanceTab({ clientId }) {
         actions={can('finance.write') && <Button size="sm" variant="secondary" icon={Plus} onClick={() => setRecurring(true)}>Nueva cuota mensual</Button>}
       >
         <RecurringTable params={{ client_id: clientId }} />
-        <div className="mt-2 border-t border-white/60 pt-2">
+        <div className="mt-2 border-t border-surface/60 pt-2">
           <p className="px-5 pb-1 pt-2 text-[12px] font-medium uppercase tracking-[0.04em] text-ink-soft">Cobros de cada mes</p>
           <PaymentsTable params={{ client_id: clientId, kind: 'monthly', pageSize: 12 }} empty={<EmptyState compact icon={Repeat} title="Sin mensualidades generadas todavía" />} />
         </div>
@@ -411,7 +411,7 @@ function CommunicationsTab({ clientId }) {
         ) : (
           <ul className="space-y-3">
             {data.map((c) => (
-              <li key={c.id} className="rounded-[16px] border border-white/80 bg-white/55 p-4">
+              <li key={c.id} className="rounded-[16px] border border-surface/80 bg-surface/55 p-4">
                 <div className="flex items-center gap-2">
                   <Badge tone={c.kind === 'note' ? 'violet' : 'brand'}>{COMM_KIND.label(c.kind)}</Badge>
                   {c.subject && <p className="truncate text-[13px] font-medium">{c.subject}</p>}
@@ -482,7 +482,7 @@ export default function ClientDetail() {
             {can('clients.write') && !archived && <Button variant="secondary" icon={Pencil} onClick={() => setEdit(true)}>Editar</Button>}
             {can('finance.write') && !archived && <Button icon={Receipt} onClick={() => quick.open('invoice', { client_id: clientId })}>Crear factura</Button>}
             <Menu
-              trigger={({ toggle }) => <IconButton icon={MoreHorizontal} label="Más acciones" onClick={toggle} className="border border-line bg-white/70" />}
+              trigger={({ toggle }) => <IconButton icon={MoreHorizontal} label="Más acciones" onClick={toggle} className="border border-line bg-surface/70" />}
               items={[
                 can('projects.write') && !archived && { label: 'Nuevo proyecto', icon: FolderKanban, onClick: () => quick.open('project', { client_id: clientId }) },
                 can('finance.write') && { label: 'Registrar pago', icon: CreditCard, onClick: () => quick.open('payment', { client_id: clientId }) },

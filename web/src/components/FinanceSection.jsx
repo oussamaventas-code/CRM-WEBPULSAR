@@ -46,7 +46,7 @@ export function FinanceSection({ defaultRange = '30d', title = 'Finanzas' }) {
               ['expenses', 'Gastos'],
               ['profit', 'Beneficio estimado'],
             ].map(([k, label]) => (
-              <div key={k} className="rounded-2xl border border-white/80 bg-white/50 px-3.5 py-2.5">
+              <div key={k} className="rounded-2xl border border-surface/80 bg-surface/50 px-3.5 py-2.5">
                 <p className="text-[11.5px] text-ink-soft">{label}</p>
                 <p className={cx('num mt-0.5 text-[17px] font-medium', k === 'profit' && data.totals.profit < 0 ? 'text-danger' : 'text-ink')}>{money(data.totals[k])}</p>
               </div>

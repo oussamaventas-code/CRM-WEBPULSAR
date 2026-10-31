@@ -7,6 +7,8 @@ export const PERMISSIONS = {
   'projects.read': 'Ver proyectos y tareas',
   'projects.write': 'Crear y editar proyectos y tareas',
   'projects.delete': 'Eliminar proyectos',
+  'sales.read': 'Ver pipeline de ventas',
+  'sales.write': 'Gestionar leads y oportunidades de venta',
   'services.read': 'Ver catálogo de servicios',
   'services.write': 'Gestionar servicios y contrataciones',
   'documents.read': 'Ver y descargar documentos',
@@ -43,7 +45,7 @@ export const ROLE_DEFINITIONS = {
     name: 'Técnico',
     description: 'Proyectos, infraestructura, monitorización e incidencias',
     permissions: [
-      'clients.read', 'projects.read', 'projects.write', 'services.read', 'documents.read', 'documents.write',
+      'clients.read', 'projects.read', 'projects.write', 'sales.read', 'services.read', 'documents.read', 'documents.write',
       'secrets.use', 'secrets.write', 'infrastructure.read', 'infrastructure.write', 'monitoring.read',
       'monitoring.write', 'incidents.read', 'incidents.write', 'activity.read',
     ],
@@ -52,7 +54,7 @@ export const ROLE_DEFINITIONS = {
     name: 'Finanzas',
     description: 'Clientes, facturación, cobros y gastos',
     permissions: [
-      'clients.read', 'clients.write', 'projects.read', 'services.read', 'services.write', 'documents.read',
+      'clients.read', 'clients.write', 'projects.read', 'sales.read', 'sales.write', 'services.read', 'services.write', 'documents.read',
       'documents.write', 'finance.read', 'finance.write', 'invoices.issue', 'incidents.read', 'testimonials.read',
       'activity.read',
     ],

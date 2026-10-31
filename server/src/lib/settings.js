@@ -48,6 +48,7 @@ export const SETTING_DEFAULTS = {
     project_status_change: true,
     task_reminders: true,
     recurring_generation: true,
+    email_notifications: true,
     integration_sync_hours: 6,
   },
   demo: { loaded: false, loaded_at: null },

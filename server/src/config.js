@@ -40,6 +40,8 @@ export const config = {
   },
   schedulerEnabled: env.SCHEDULER_ENABLED !== '0',
   backups: { keep: Number(env.BACKUP_KEEP || 14), hour: Number(env.BACKUP_HOUR || 3) },
+  push: { publicKey: env.VAPID_PUBLIC_KEY || null, privateKey: env.VAPID_PRIVATE_KEY || null, subject: env.VAPID_SUBJECT || 'mailto:admin@localhost.invalid' },
+  githubToken: env.GITHUB_TOKEN || null,
   envSecrets: {
     hostinger: env.HOSTINGER_API_TOKEN || null,
     cloudflare: env.CLOUDFLARE_API_TOKEN || null,
