@@ -80,6 +80,10 @@ Flujo: web → CRM → Stripe Checkout (alojado por Stripe) → webhook de Strip
 
 Claves en el `.env` del CRM, nunca en la web: `STRIPE_SECRET_KEY` y `STRIPE_WEBHOOK_SECRET`. Al terminar, pon `VITE_CHECKOUT_ENABLED=true`, recompila y añade `connect-src` si cambia algún dominio.
 
+## Despliegue en Vercel
+
+La web pública se despliega como un proyecto Vercel separado del CRM. Selecciona esta carpeta como **Root Directory: `site`**, configura `VITE_CRM_API_URL`, `VITE_SITE_URL` y, si se usa, `VITE_TURNSTILE_SITE_KEY`. La configuración de SPA está en `site/vercel.json`. Sigue [la guía completa de Vercel y Supabase](../docs/VERCEL_SUPABASE.md) para preparar también el CRM, CORS y el formulario.
+
 ## Despliegue en el VPS
 
 No toca nada del CRM (ni su servicio, ni su base de datos, ni `crm.webpulsar.es`).

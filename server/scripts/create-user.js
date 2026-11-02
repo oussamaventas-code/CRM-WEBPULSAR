@@ -34,15 +34,15 @@ async function readStdin() {
   return data.replace(/\r?\n$/, '');
 }
 
-migrate({ log: () => {} });
-syncRbac();
+await migrate({ log: () => {} });
+await syncRbac();
 
 const email = (values.email ?? (await ask('Email: '))).toLowerCase();
 const name = values.name ?? (await ask('Nombre: '));
 const role = values.role;
 if (!ROLE_DEFINITIONS[role]) throw new Error(`Rol no válido. Usa: ${Object.keys(ROLE_DEFINITIONS).join(', ')}`);
 if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Email no válido');
-if (db.value('SELECT 1 FROM users WHERE email = ?', [email])) throw new Error('Ya existe un usuario con ese email');
+if (await db.value('SELECT 1 FROM users WHERE email = ?', [email])) throw new Error('Ya existe un usuario con ese email');
 
 let password = values['password-stdin'] ? await readStdin() : await ask('Contraseña (mín. 12 caracteres): ', { hidden: true });
 let problem = passwordProblem(password, { email, name });
@@ -54,11 +54,11 @@ while (problem && !values['password-stdin']) {
 if (problem) throw new Error(problem);
 if (!values['password-stdin'] && (await ask('Repite la contraseña: ', { hidden: true })) !== password) throw new Error('Las contraseñas no coinciden');
 
-const isOwner = !db.value('SELECT COUNT(*) FROM users');
+const isOwner = !await db.value('SELECT COUNT(*) FROM users');
 const id = Number(
-  db.run('INSERT INTO users (email, name, password_hash, role_id, is_owner, password_changed_at) VALUES (?, ?, ?, (SELECT id FROM roles WHERE key = ?), ?, ?)', [
+  (await db.run('INSERT INTO users (email, name, password_hash, role_id, is_owner, password_changed_at) VALUES (?, ?, ?, (SELECT id FROM roles WHERE key = ?), ?, ?)', [
     email, name, await hashPassword(password), role, isOwner ? 1 : 0, new Date().toISOString(),
-  ]).lastInsertRowid,
+  ])).lastInsertRowid,
 );
-record({ system: true }, { action: 'user.created', entityType: 'user', entityId: id, label: name, summary: `Usuario creado desde terminal: ${name} (${ROLE_DEFINITIONS[role].name})` });
+await record({ system: true }, { action: 'user.created', entityType: 'user', entityId: id, label: name, summary: `Usuario creado desde terminal: ${name} (${ROLE_DEFINITIONS[role].name})` });
 console.log(`✓ Usuario creado: ${name} <${email}> · ${ROLE_DEFINITIONS[role].name}${isOwner ? ' · administrador principal' : ''}`);

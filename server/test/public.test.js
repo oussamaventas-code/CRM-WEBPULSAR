@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 
 process.env.DATABASE_PATH = ':memory:';
+process.env.DATABASE_URL = '';
 process.env.MASTER_KEY = crypto.randomBytes(32).toString('base64');
 process.env.SCHEDULER_ENABLED = '0';
 process.env.PUBLIC_FORM_ORIGINS = 'https://webpulsar.es, https://www.webpulsar.es/';
@@ -14,8 +15,8 @@ const { db } = await import('../src/db/index.js');
 const { hashPassword } = await import('../src/lib/password.js');
 const { createApp } = await import('../src/app.js');
 
-migrate({ log: () => {} });
-syncRbac();
+await migrate({ log: () => {} });
+await syncRbac();
 db.run("INSERT INTO users (email, name, password_hash, role_id, is_owner) VALUES ('admin@test.es', 'Admin', ?, (SELECT id FROM roles WHERE key = 'admin'), 1)", [await hashPassword('Clave-Segura-123')]);
 
 const server = createApp().listen(0);

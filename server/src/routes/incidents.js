@@ -34,7 +34,7 @@ const FROM = `(SELECT i.*, c.name AS client_name, p.name AS project_name, s.name
   FROM incidents i LEFT JOIN clients c ON c.id = i.client_id LEFT JOIN projects p ON p.id = i.project_id
   LEFT JOIN servers s ON s.id = i.server_id LEFT JOIN domains d ON d.id = i.domain_id LEFT JOIN users u ON u.id = i.assignee_user_id) x`;
 
-router.get('/', can('incidents.read'), (req, res) => {
+router.get('/', can('incidents.read'), async (req, res) => {
   const where = [];
   const params = [];
   if (req.query.view === 'inbox' || !req.query.view) where.push("x.status NOT IN ('resolved', 'closed')");
@@ -46,7 +46,7 @@ router.get('/', can('incidents.read'), (req, res) => {
   if (req.query.server_id) where.push('x.server_id = ?') && params.push(Number(req.query.server_id));
   if (req.query.mine === '1') where.push('x.assignee_user_id = ?') && params.push(req.user.id);
   res.json(
-    paginate(req.query, {
+    await (paginate(req.query, {
       from: FROM,
       where,
       params,
@@ -60,37 +60,37 @@ router.get('/', can('incidents.read'), (req, res) => {
       },
       defaultSort: req.query.view === 'history' ? ['resolved_at', 'desc'] : ['priority', 'asc'],
       tiebreak: 'x.opened_at DESC',
-    }),
+    })),
   );
 });
 
-const load = (id) => db.get(`SELECT * FROM ${FROM} WHERE x.id = ?`, [id]);
+const load = async (id) => await (db.get(`SELECT * FROM ${FROM} WHERE x.id = ?`, [id]));
 
-router.get('/:id', can('incidents.read'), (req, res) => {
-  const incident = load(req.params.id);
+router.get('/:id', can('incidents.read'), async (req, res) => {
+  const incident = await (load(req.params.id));
   if (!incident) throw notFound('Incidencia no encontrada');
   res.json({
     incident,
-    events: db.all('SELECT e.*, u.name AS user_name FROM incident_events e LEFT JOIN users u ON u.id = e.user_id WHERE e.incident_id = ? ORDER BY e.created_at, e.id', [incident.id]),
-    alerts: db.all('SELECT id, title, severity, status, opened_at, resolved_at FROM monitoring_alerts WHERE incident_id = ?', [incident.id]),
+    events: await (db.all('SELECT e.*, u.name AS user_name FROM incident_events e LEFT JOIN users u ON u.id = e.user_id WHERE e.incident_id = ? ORDER BY e.created_at, e.id', [incident.id])),
+    alerts: await (db.all('SELECT id, title, severity, status, opened_at, resolved_at FROM monitoring_alerts WHERE incident_id = ?', [incident.id])),
   });
 });
 
-router.post('/', can('incidents.write'), (req, res) => {
+router.post('/', can('incidents.write'), async (req, res) => {
   const data = parse(z.object(fields), req.body);
-  const id = tx(() => {
+  const id = await (tx(async () => {
     const opened = data.opened_at ?? nowIso();
-    const newId = insert('incidents', {
+    const newId = await (insert('incidents', {
       ...data,
       opened_at: opened,
       resolved_at: CLOSED.has(data.status) ? nowIso() : null,
       closed_at: data.status === 'closed' ? nowIso() : null,
       created_by: req.user.id,
-    });
-    insert('incident_events', { incident_id: newId, user_id: req.user.id, type: 'created', body: data.description ?? null });
-    record(req, { action: 'incident.created', entityType: 'incident', entityId: newId, clientId: data.client_id, label: data.title, summary: `Incidencia ${PRIORITY_LABEL[data.priority].toLowerCase()}: ${data.title}` });
+    }));
+    await (insert('incident_events', { incident_id: newId, user_id: req.user.id, type: 'created', body: data.description ?? null }));
+    await (record(req, { action: 'incident.created', entityType: 'incident', entityId: newId, clientId: data.client_id, label: data.title, summary: `Incidencia ${PRIORITY_LABEL[data.priority].toLowerCase()}: ${data.title}` }));
     if (data.priority === 'critical' || (data.assignee_user_id && data.assignee_user_id !== req.user.id)) {
-      notify({
+      await (notify({
         userIds: data.priority === 'critical' ? undefined : [data.assignee_user_id],
         excludeUserId: req.user.id,
         type: 'incident.created',
@@ -99,36 +99,36 @@ router.post('/', can('incidents.write'), (req, res) => {
         entityType: 'incident',
         entityId: newId,
         link: `/incidencias/${newId}`,
-      });
+      }));
     }
     return newId;
-  });
-  res.status(201).json(load(id));
+  }));
+  res.status(201).json(await (load(id)));
 });
 
-router.patch('/:id', can('incidents.write'), (req, res) => {
-  const before = findOr404('incidents', req.params.id, { message: 'Incidencia no encontrada' });
+router.patch('/:id', can('incidents.write'), async (req, res) => {
+  const before = await (findOr404('incidents', req.params.id, { message: 'Incidencia no encontrada' }));
   const data = parse(z.object(fields).partial(), req.body);
   if (data.status === 'resolved' && !(data.resolution ?? before.resolution)) throw badRequest('Describe la resolución antes de marcarla como resuelta', { resolution: 'Obligatorio al resolver' });
-  tx(() => {
+  await (tx(async () => {
     const changes = { ...data };
     if (data.status && data.status !== before.status) {
       if (CLOSED.has(data.status) && !before.resolved_at) changes.resolved_at = nowIso();
       if (data.status === 'closed') changes.closed_at = nowIso();
       if (!CLOSED.has(data.status)) Object.assign(changes, { resolved_at: null, closed_at: null });
-      insert('incident_events', { incident_id: before.id, user_id: req.user.id, type: 'status_change', from_value: before.status, to_value: data.status, body: data.status === 'resolved' ? data.resolution ?? before.resolution : null });
+      await (insert('incident_events', { incident_id: before.id, user_id: req.user.id, type: 'status_change', from_value: before.status, to_value: data.status, body: data.status === 'resolved' ? data.resolution ?? before.resolution : null }));
     }
-    if (data.priority && data.priority !== before.priority) insert('incident_events', { incident_id: before.id, user_id: req.user.id, type: 'priority_change', from_value: before.priority, to_value: data.priority });
+    if (data.priority && data.priority !== before.priority) await (insert('incident_events', { incident_id: before.id, user_id: req.user.id, type: 'priority_change', from_value: before.priority, to_value: data.priority }));
     if ('assignee_user_id' in data && data.assignee_user_id !== before.assignee_user_id) {
-      const name = data.assignee_user_id ? db.value('SELECT name FROM users WHERE id = ?', [data.assignee_user_id]) : 'nadie';
-      insert('incident_events', { incident_id: before.id, user_id: req.user.id, type: 'assignment', to_value: name });
+      const name = data.assignee_user_id ? await (db.value('SELECT name FROM users WHERE id = ?', [data.assignee_user_id])) : 'nadie';
+      await (insert('incident_events', { incident_id: before.id, user_id: req.user.id, type: 'assignment', to_value: name }));
       if (data.assignee_user_id && data.assignee_user_id !== req.user.id) {
-        notify({ userIds: [data.assignee_user_id], type: 'incident.assigned', title: `Incidencia asignada: ${before.title}`, severity: 'warning', entityType: 'incident', entityId: before.id, link: `/incidencias/${before.id}` });
+        await (notify({ userIds: [data.assignee_user_id], type: 'incident.assigned', title: `Incidencia asignada: ${before.title}`, severity: 'warning', entityType: 'incident', entityId: before.id, link: `/incidencias/${before.id}` }));
       }
     }
-    update('incidents', before.id, changes);
+    await (update('incidents', before.id, changes));
     const resolvedNow = data.status === 'resolved' && before.status !== 'resolved';
-    record(req, {
+    await (record(req, {
       action: resolvedNow ? 'incident.resolved' : data.status && data.status !== before.status ? 'incident.status_changed' : 'incident.updated',
       entityType: 'incident',
       entityId: before.id,
@@ -137,19 +137,19 @@ router.patch('/:id', can('incidents.write'), (req, res) => {
       summary: resolvedNow ? `Incidencia resuelta: ${before.title}` : data.status && data.status !== before.status ? `Incidencia ${before.title}: ${LABEL[before.status]} → ${LABEL[data.status]}` : `Incidencia actualizada: ${before.title}`,
       before,
       after: data,
-    });
-  });
-  res.json(load(before.id));
+    }));
+  }));
+  res.json(await (load(before.id)));
 });
 
-router.post('/:id/comments', can('incidents.write'), (req, res) => {
-  const incident = findOr404('incidents', req.params.id, { message: 'Incidencia no encontrada' });
+router.post('/:id/comments', can('incidents.write'), async (req, res) => {
+  const incident = await (findOr404('incidents', req.params.id, { message: 'Incidencia no encontrada' }));
   const { body } = parse(z.object({ body: f.text(10000) }), req.body);
-  tx(() => {
-    insert('incident_events', { incident_id: incident.id, user_id: req.user.id, type: 'comment', body });
-    db.run('UPDATE incidents SET updated_at = ? WHERE id = ?', [nowIso(), incident.id]);
-  });
-  res.status(201).json(db.all('SELECT e.*, u.name AS user_name FROM incident_events e LEFT JOIN users u ON u.id = e.user_id WHERE e.incident_id = ? ORDER BY e.created_at, e.id', [incident.id]));
+  await (tx(async () => {
+    await (insert('incident_events', { incident_id: incident.id, user_id: req.user.id, type: 'comment', body }));
+    await (db.run('UPDATE incidents SET updated_at = ? WHERE id = ?', [nowIso(), incident.id]));
+  }));
+  res.status(201).json(await (db.all('SELECT e.*, u.name AS user_name FROM incident_events e LEFT JOIN users u ON u.id = e.user_id WHERE e.incident_id = ? ORDER BY e.created_at, e.id', [incident.id])));
 });
 
 export default router;

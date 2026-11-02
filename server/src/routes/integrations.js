@@ -37,8 +37,8 @@ const DOCS = {
   },
 };
 
-function present(key) {
-  const i = getIntegration(key);
+async function present(key) {
+  const i = await (getIntegration(key));
   const env = !!envCredential(key) || (key === 'smtp' && !!config.envSecrets.smtp);
   const { _accounts: accounts, ...capabilities } = i.capabilities ?? {};
   return {
@@ -55,7 +55,7 @@ function present(key) {
     last_sync_at: i.last_sync_at,
     last_sync_report: i.last_sync_report,
     last_error: i.last_error,
-    mailer_ready: key === 'smtp' ? mailerStatus().ready : undefined,
+    mailer_ready: key === 'smtp' ? await (mailerStatus()).ready : undefined,
     ...DOCS[key],
   };
 }
@@ -92,41 +92,41 @@ router.put('/:key', can('integrations.manage'), async (req, res) => {
   const key = req.params.key;
   if (!KEYS.includes(key)) throw badRequest('Integración desconocida');
   const data = parse(schemas[key], req.body);
-  const current = getIntegration(key);
+  const current = await (getIntegration(key));
   if (key === 'smtp') {
     const { password, ...cfg } = data;
-    saveCredential('smtp', password || null, cfg, req.user.id);
+    await (saveCredential('smtp', password || null, cfg, req.user.id));
   } else {
     if (!data.token && !current.secret_hint && !envCredential(key)) throw badRequest('Introduce el token', { token: 'Obligatorio' });
-    saveCredential(key, data.token || null, { ...current.config, account_id: data.account_id ?? current.config.account_id ?? null }, req.user.id);
+    await (saveCredential(key, data.token || null, { ...current.config, account_id: data.account_id ?? current.config.account_id ?? null }, req.user.id));
   }
-  record(req, { action: 'integration.configured', entityType: 'integration', entityId: current.id, label: current.name, summary: `Credenciales de ${current.name} actualizadas` });
+  await (record(req, { action: 'integration.configured', entityType: 'integration', entityId: current.id, label: current.name, summary: `Credenciales de ${current.name} actualizadas` }));
   try {
     await verifyIntegration(req, key);
   } catch (err) {
-    return res.status(200).json({ ...present(key), verify_error: err.message });
+    return res.status(200).json({ ...await (present(key)), verify_error: err.message });
   }
-  res.json(present(key));
+  res.json(await (present(key)));
 });
 
 router.post('/:key/verify', can('integrations.manage'), async (req, res) => {
   if (!KEYS.includes(req.params.key)) throw badRequest('Integración desconocida');
   await verifyIntegration(req, req.params.key);
-  res.json(present(req.params.key));
+  res.json(await (present(req.params.key)));
 });
 
 router.post('/:key/sync', can('infrastructure.write'), async (req, res) => {
   const report = await syncIntegration(req, req.params.key);
-  res.json({ report, integration: present(req.params.key) });
+  res.json({ report, integration: await (present(req.params.key)) });
 });
 
-router.delete('/:key', can('integrations.manage'), (req, res) => {
+router.delete('/:key', can('integrations.manage'), async (req, res) => {
   const key = req.params.key;
   if (!KEYS.includes(key)) throw badRequest('Integración desconocida');
-  clearCredential(key);
-  if (key === 'smtp') db.run("UPDATE integrations SET config = '{}' WHERE provider_key = 'smtp'");
-  record(req, { action: 'integration.disconnected', entityType: 'integration', label: key, summary: `Integración desconectada: ${getIntegration(key).name}` });
-  res.json(present(key));
+  await (clearCredential(key));
+  if (key === 'smtp') await (db.run("UPDATE integrations SET config = '{}' WHERE provider_key = 'smtp'"));
+  await (record(req, { action: 'integration.disconnected', entityType: 'integration', label: key, summary: `Integración desconectada: ${await (await (getIntegration(key))).name}` }));
+  res.json(await (present(key)));
 });
 
 export default router;

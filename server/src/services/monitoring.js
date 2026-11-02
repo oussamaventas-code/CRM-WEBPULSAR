@@ -93,8 +93,8 @@ function sslCheck(check, settings) {
   });
 }
 
-function heartbeatCheck(check, settings) {
-  const server = db.get('SELECT last_heartbeat_at, agent_token_hash FROM servers WHERE id = ?', [check.entity_id]);
+async function heartbeatCheck(check, settings) {
+  const server = await (db.get('SELECT last_heartbeat_at, agent_token_hash FROM servers WHERE id = ?', [check.entity_id]));
   if (!server) return { status: 'down', message: 'Servidor no encontrado' };
   if (!server.agent_token_hash) return { status: 'unknown', message: 'El agente de monitorización no está configurado' };
   if (!server.last_heartbeat_at) return { status: 'down', message: 'El agente aún no ha enviado ningún heartbeat' };
@@ -103,8 +103,8 @@ function heartbeatCheck(check, settings) {
   return { status: 'up', message: `Último heartbeat hace ${age} s` };
 }
 
-function domainExpiryCheck(check, settings) {
-  const d = db.get('SELECT expires_at FROM domains WHERE id = ?', [check.entity_id]);
+async function domainExpiryCheck(check, settings) {
+  const d = await (db.get('SELECT expires_at FROM domains WHERE id = ?', [check.entity_id]));
   if (!d?.expires_at) return { status: 'unknown', message: 'Fecha de caducidad desconocida' };
   const days = daysBetween(today(), d.expires_at.slice(0, 10));
   if (days < 0) return { status: 'down', message: `Dominio caducado hace ${-days} días` };
@@ -114,7 +114,7 @@ function domainExpiryCheck(check, settings) {
 
 async function integrationCheck(check) {
   const key = check.target;
-  const token = getCredential(key);
+  const token = await (getCredential(key));
   if (!token) return { status: 'unknown', message: 'Sin credenciales configuradas' };
   const started = performance.now();
   try {
@@ -127,7 +127,7 @@ async function integrationCheck(check) {
 }
 
 async function d1Check(check) {
-  const database = db.get('SELECT * FROM databases WHERE id = ?', [check.entity_id]);
+  const database = await (db.get('SELECT * FROM databases WHERE id = ?', [check.entity_id]));
   if (!database?.external_id) return { status: 'unknown', message: 'Base de datos D1 sin identificador' };
   const started = performance.now();
   try {
@@ -140,7 +140,7 @@ async function d1Check(check) {
 }
 
 export async function runCheck(check) {
-  const settings = getSetting('monitoring');
+  const settings = await (getSetting('monitoring'));
   switch (check.type) {
     case 'http':
       return httpCheck(check, settings);
@@ -149,13 +149,13 @@ export async function runCheck(check) {
     case 'ssl_expiry':
       return sslCheck(check, settings);
     case 'heartbeat':
-      return heartbeatCheck(check, settings);
+      return await (heartbeatCheck(check, settings));
     case 'domain_expiry':
-      return domainExpiryCheck(check, settings);
+      return await (domainExpiryCheck(check, settings));
     case 'integration':
-      return integrationCheck(check);
+      return await (integrationCheck(check));
     case 'd1_query':
-      return d1Check(check);
+      return await (d1Check(check));
     default:
       return { status: 'unknown', message: 'Tipo de comprobación no soportado' };
   }
@@ -165,31 +165,31 @@ const ENTITY_TABLE = { server: 'servers', domain: 'domains', database: 'database
 const ENTITY_LABEL = { server: 'Servidor', domain: 'Dominio', database: 'Base de datos', application: 'Aplicación', integration: 'Integración' };
 const ENTITY_LINK = { server: (id) => `/infraestructura/servidores/${id}`, domain: (id) => `/infraestructura/dominios/${id}`, database: () => '/infraestructura?tab=bases', application: () => '/infraestructura?tab=aplicaciones', integration: () => '/configuracion?tab=integraciones' };
 
-function entityName(type, id) {
+async function entityName(type, id) {
   if (!ENTITY_TABLE[type] || !id) return null;
-  return db.value(`SELECT name FROM ${ENTITY_TABLE[type]} WHERE id = ?`, [id]);
+  return await (db.value(`SELECT name FROM ${ENTITY_TABLE[type]} WHERE id = ?`, [id]));
 }
 
 /** Ejecuta una comprobación, guarda el resultado y abre/cierra alertas. */
 export async function executeCheck(check, ctx = SYSTEM) {
   const result = await runCheck(check);
   const checkedAt = nowIso();
-  tx(() => {
+  await (tx(async () => {
     if (result.status !== 'unknown') {
-      db.run('INSERT INTO monitoring_results (check_id, status, latency_ms, status_code, message, checked_at) VALUES (?, ?, ?, ?, ?, ?)', [
+      await (db.run('INSERT INTO monitoring_results (check_id, status, latency_ms, status_code, message, checked_at) VALUES (?, ?, ?, ?, ?, ?)', [
         check.id, result.status, result.latency_ms ?? null, result.status_code ?? null, result.message?.slice(0, 500) ?? null, checkedAt,
-      ]);
+      ]));
     }
     const failures = result.status === 'down' ? check.consecutive_failures + 1 : 0;
-    db.run('UPDATE monitoring_checks SET last_status = ?, last_latency_ms = ?, last_checked_at = ?, last_message = ?, consecutive_failures = ? WHERE id = ?', [
+    await (db.run('UPDATE monitoring_checks SET last_status = ?, last_latency_ms = ?, last_checked_at = ?, last_message = ?, consecutive_failures = ? WHERE id = ?', [
       result.status, result.latency_ms ?? null, checkedAt, result.message?.slice(0, 500) ?? null, failures, check.id,
-    ]);
+    ]));
 
     if (check.type === 'ssl_expiry' && result.meta?.expires && check.entity_type === 'domain') {
-      db.run('UPDATE domains SET ssl_expires_at = ? WHERE id = ?', [result.meta.expires.toISOString(), check.entity_id]);
+      await (db.run('UPDATE domains SET ssl_expires_at = ? WHERE id = ?', [result.meta.expires.toISOString(), check.entity_id]));
     }
 
-    const name = entityName(check.entity_type, check.entity_id) ?? check.name;
+    const name = await (entityName(check.entity_type, check.entity_id)) ?? check.name;
     const dedupeKey = `check:${check.id}`;
     const isExpiry = check.type === 'domain_expiry' || check.type === 'ssl_expiry';
     if (result.status === 'down' && failures >= check.failure_threshold) {
@@ -202,7 +202,7 @@ export async function executeCheck(check, ctx = SYSTEM) {
         integration: `Integración sin autorización: ${name}`,
         d1_query: `Base de datos no responde: ${name}`,
       };
-      openAlert(ctx, {
+      await (openAlert(ctx, {
         checkId: check.id,
         type: `check_${check.type}`,
         severity: 'critical',
@@ -211,9 +211,9 @@ export async function executeCheck(check, ctx = SYSTEM) {
         title: titles[check.type] ?? `Comprobación fallida: ${check.name}`,
         message: `${result.message}. Ha fallado ${failures} ${failures === 1 ? 'vez' : 'veces'} seguidas.`,
         dedupeKey,
-      });
+      }));
     } else if (result.status === 'degraded' && isExpiry) {
-      openAlert(ctx, {
+      await (openAlert(ctx, {
         checkId: check.id,
         type: `check_${check.type}`,
         severity: 'warning',
@@ -222,12 +222,12 @@ export async function executeCheck(check, ctx = SYSTEM) {
         title: check.type === 'domain_expiry' ? `Dominio próximo a caducar: ${name}` : `Certificado SSL próximo a caducar: ${name}`,
         message: result.message,
         dedupeKey,
-      });
+      }));
     } else if (result.status === 'up') {
-      resolveAlert(ctx, dedupeKey, `Recuperado: ${check.name}`);
+      await (resolveAlert(ctx, dedupeKey, `Recuperado: ${check.name}`));
     }
-  });
-  if (check.entity_type && ENTITY_TABLE[check.entity_type]) evaluateEntity(check.entity_type, check.entity_id);
+  }));
+  if (check.entity_type && ENTITY_TABLE[check.entity_type]) await (evaluateEntity(check.entity_type, check.entity_id));
   return result;
 }
 
@@ -235,28 +235,28 @@ export async function executeCheck(check, ctx = SYSTEM) {
  * Abre una alerta (o actualiza la existente), notifica y, si es crítica y está activada
  * la automatización, crea una incidencia vinculada.
  */
-export function openAlert(ctx, { checkId = null, type, severity, entityType = null, entityId = null, title, message, dedupeKey, link }) {
+export async function openAlert(ctx, { checkId = null, type, severity, entityType = null, entityId = null, title, message, dedupeKey, link }) {
   const now = nowIso();
-  const existing = db.get("SELECT * FROM monitoring_alerts WHERE dedupe_key = ? AND status <> 'resolved'", [dedupeKey]);
+  const existing = await (db.get("SELECT * FROM monitoring_alerts WHERE dedupe_key = ? AND status <> 'resolved'", [dedupeKey]));
   if (existing) {
-    db.run('UPDATE monitoring_alerts SET occurrences = occurrences + 1, last_seen_at = ?, message = ?, severity = ? WHERE id = ?', [now, message, severity, existing.id]);
+    await (db.run('UPDATE monitoring_alerts SET occurrences = occurrences + 1, last_seen_at = ?, message = ?, severity = ? WHERE id = ?', [now, message, severity, existing.id]));
     return existing.id;
   }
   const alertId = Number(
-    db.run(
+    await (await (db.run(
       `INSERT INTO monitoring_alerts (check_id, entity_type, entity_id, type, severity, title, message, status, dedupe_key, opened_at, last_seen_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
       [checkId, entityType, entityId, type, severity, title, message, dedupeKey, now, now],
-    ).lastInsertRowid,
+    ))).lastInsertRowid,
   );
-  const automations = getSetting('automations');
+  const automations = await (getSetting('automations'));
   const target = link ?? (entityType && ENTITY_LINK[entityType] ? ENTITY_LINK[entityType](entityId) : '/infraestructura?tab=monitorizacion');
   const isServer = entityType === 'server';
   if (!isServer || automations.server_down) {
-    notify({ type: 'alert.opened', title, body: message, severity: severity === 'critical' ? 'critical' : 'warning', entityType: 'alert', entityId: alertId, link: target, dedupeKey: `alert:${alertId}` });
+    await (notify({ type: 'alert.opened', title, body: message, severity: severity === 'critical' ? 'critical' : 'warning', entityType: 'alert', entityId: alertId, link: target, dedupeKey: `alert:${alertId}` }));
   }
-  const clientId = entityType && ENTITY_TABLE[entityType] ? db.value(`SELECT client_id FROM ${ENTITY_TABLE[entityType]} WHERE id = ?`, [entityId]) : null;
-  record(ctx, {
+  const clientId = entityType && ENTITY_TABLE[entityType] ? await (db.value(`SELECT client_id FROM ${ENTITY_TABLE[entityType]} WHERE id = ?`, [entityId])) : null;
+  await (record(ctx, {
     action: isServer ? 'server.down' : 'alert.opened',
     entityType: entityType ?? 'alert',
     entityId: entityId ?? alertId,
@@ -264,33 +264,33 @@ export function openAlert(ctx, { checkId = null, type, severity, entityType = nu
     label: title,
     summary: title,
     data: { alert_id: alertId, severity },
-  });
+  }));
 
   if (severity === 'critical' && automations.alert_to_incident && entityType !== 'integration') {
-    createIncidentFromAlert(ctx, alertId);
+    await (createIncidentFromAlert(ctx, alertId));
   }
   return alertId;
 }
 
-export function resolveAlert(ctx, dedupeKey, title) {
-  const alert = db.get("SELECT * FROM monitoring_alerts WHERE dedupe_key = ? AND status <> 'resolved'", [dedupeKey]);
+export async function resolveAlert(ctx, dedupeKey, title) {
+  const alert = await (db.get("SELECT * FROM monitoring_alerts WHERE dedupe_key = ? AND status <> 'resolved'", [dedupeKey]));
   if (!alert) return false;
   const now = nowIso();
-  db.run("UPDATE monitoring_alerts SET status = 'resolved', resolved_at = ? WHERE id = ?", [now, alert.id]);
-  notify({ type: 'alert.resolved', title: title ?? `Resuelto: ${alert.title}`, body: alert.title, severity: 'success', entityType: 'alert', entityId: alert.id, dedupeKey: `alert-resolved:${alert.id}` });
-  record(ctx, { action: 'alert.resolved', entityType: alert.entity_type ?? 'alert', entityId: alert.entity_id ?? alert.id, label: alert.title, summary: title ?? `Alerta resuelta: ${alert.title}` });
+  await (db.run("UPDATE monitoring_alerts SET status = 'resolved', resolved_at = ? WHERE id = ?", [now, alert.id]));
+  await (notify({ type: 'alert.resolved', title: title ?? `Resuelto: ${alert.title}`, body: alert.title, severity: 'success', entityType: 'alert', entityId: alert.id, dedupeKey: `alert-resolved:${alert.id}` }));
+  await (record(ctx, { action: 'alert.resolved', entityType: alert.entity_type ?? 'alert', entityId: alert.entity_id ?? alert.id, label: alert.title, summary: title ?? `Alerta resuelta: ${alert.title}` }));
   if (alert.incident_id) {
-    db.run("INSERT INTO incident_events (incident_id, type, body) VALUES (?, 'alert', ?)", [alert.incident_id, 'La alerta asociada se ha recuperado automáticamente. Revisa y cierra la incidencia si procede.']);
+    await (db.run("INSERT INTO incident_events (incident_id, type, body) VALUES (?, 'alert', ?)", [alert.incident_id, 'La alerta asociada se ha recuperado automáticamente. Revisa y cierra la incidencia si procede.']));
   }
   return true;
 }
 
-export function createIncidentFromAlert(ctx, alertId, { userId = null } = {}) {
-  const alert = db.get('SELECT * FROM monitoring_alerts WHERE id = ?', [alertId]);
+export async function createIncidentFromAlert(ctx, alertId, { userId = null } = {}) {
+  const alert = await (db.get('SELECT * FROM monitoring_alerts WHERE id = ?', [alertId]));
   if (!alert || alert.incident_id) return alert?.incident_id ?? null;
   const table = ENTITY_TABLE[alert.entity_type];
-  const entity = table ? db.get(`SELECT * FROM ${table} WHERE id = ?`, [alert.entity_id]) : null;
-  const res = db.run(
+  const entity = table ? await (db.get(`SELECT * FROM ${table} WHERE id = ?`, [alert.entity_id])) : null;
+  const res = await (db.run(
     `INSERT INTO incidents (title, description, category, client_id, project_id, server_id, domain_id, database_id, priority, status, source, opened_at, created_by)
      VALUES (?, ?, 'infrastructure', ?, ?, ?, ?, ?, ?, 'open', 'alert', ?, ?)`,
     [
@@ -305,26 +305,26 @@ export function createIncidentFromAlert(ctx, alertId, { userId = null } = {}) {
       nowIso(),
       userId,
     ],
-  );
+  ));
   const incidentId = Number(res.lastInsertRowid);
-  db.run('UPDATE monitoring_alerts SET incident_id = ? WHERE id = ?', [incidentId, alert.id]);
-  db.run("INSERT INTO incident_events (incident_id, user_id, type, body) VALUES (?, ?, 'created', ?)", [incidentId, userId, `Creada a partir de la alerta: ${alert.title}`]);
-  record(ctx, { action: 'incident.created', entityType: 'incident', entityId: incidentId, clientId: entity?.client_id ?? null, label: alert.title, summary: `Incidencia creada desde alerta: ${alert.title}` });
+  await (db.run('UPDATE monitoring_alerts SET incident_id = ? WHERE id = ?', [incidentId, alert.id]));
+  await (db.run("INSERT INTO incident_events (incident_id, user_id, type, body) VALUES (?, ?, 'created', ?)", [incidentId, userId, `Creada a partir de la alerta: ${alert.title}`]));
+  await (record(ctx, { action: 'incident.created', entityType: 'incident', entityId: incidentId, clientId: entity?.client_id ?? null, label: alert.title, summary: `Incidencia creada desde alerta: ${alert.title}` }));
   return incidentId;
 }
 
 // ── Estado agregado de cada recurso ──────────────────────
-function checksFor(type, id) {
-  return db.all("SELECT * FROM monitoring_checks WHERE entity_type = ? AND entity_id = ? AND enabled = 1 AND last_status <> 'unknown'", [type, id]);
+async function checksFor(type, id) {
+  return await (db.all("SELECT * FROM monitoring_checks WHERE entity_type = ? AND entity_id = ? AND enabled = 1 AND last_status <> 'unknown'", [type, id]));
 }
 
 const STOPPED = new Set(['stopped', 'stopping', 'error', 'suspended', 'suspending', 'destroyed', 'destroying']);
 
-export function evaluateServer(serverId) {
-  const server = db.get('SELECT * FROM servers WHERE id = ?', [serverId]);
+export async function evaluateServer(serverId) {
+  const server = await (db.get('SELECT * FROM servers WHERE id = ?', [serverId]));
   if (!server) return;
-  const settings = getSetting('monitoring');
-  const checks = checksFor('server', serverId);
+  const settings = await (getSetting('monitoring'));
+  const checks = await (checksFor('server', serverId));
   const down = [];
   const warn = [];
   let verified = false;
@@ -338,7 +338,7 @@ export function evaluateServer(serverId) {
     } else if (c.last_status === 'up') verified = true;
   }
 
-  const metric = db.get('SELECT * FROM server_metrics WHERE server_id = ? AND collected_at >= ? ORDER BY collected_at DESC LIMIT 1', [serverId, new Date(Date.now() - 20 * 60_000).toISOString()]);
+  const metric = await (db.get('SELECT * FROM server_metrics WHERE server_id = ? AND collected_at >= ? ORDER BY collected_at DESC LIMIT 1', [serverId, new Date(Date.now() - 20 * 60_000).toISOString()]));
   if (metric) {
     if (metric.cpu_pct != null && metric.cpu_pct >= settings.cpu_warn_pct) warn.push(`CPU al ${Math.round(metric.cpu_pct)} %`);
     if (metric.ram_total_bytes && metric.ram_used_bytes != null) {
@@ -363,14 +363,14 @@ export function evaluateServer(serverId) {
       : 'Sin comprobaciones configuradas. Instala el agente o añade una comprobación.';
   }
   const lastCheck = checks.reduce((max, c) => (c.last_checked_at > (max ?? '') ? c.last_checked_at : max), server.last_heartbeat_at);
-  db.run('UPDATE servers SET status = ?, status_reason = ?, last_check_at = ? WHERE id = ?', [status, reason, lastCheck ?? null, serverId]);
+  await (db.run('UPDATE servers SET status = ?, status_reason = ?, last_check_at = ? WHERE id = ?', [status, reason, lastCheck ?? null, serverId]));
 }
 
-function evaluateGeneric(type, id) {
+async function evaluateGeneric(type, id) {
   const table = ENTITY_TABLE[type];
-  const row = db.get(`SELECT * FROM ${table} WHERE id = ?`, [id]);
+  const row = await (db.get(`SELECT * FROM ${table} WHERE id = ?`, [id]));
   if (!row) return;
-  const checks = checksFor(type, id);
+  const checks = await (checksFor(type, id));
   const down = checks.filter((c) => c.last_status === 'down');
   const degraded = checks.filter((c) => c.last_status === 'degraded');
   const up = checks.filter((c) => c.last_status === 'up');
@@ -383,12 +383,12 @@ function evaluateGeneric(type, id) {
   else if (verifying.length) [status, reason] = ['operational', verifying.map((c) => c.last_message).join(' · ')];
   else if (type === 'domain' && up.length) reason = 'Caducidad correcta; la disponibilidad web no está comprobada';
   const lastCheck = checks.reduce((max, c) => (c.last_checked_at > (max ?? '') ? c.last_checked_at : max), null);
-  db.run(`UPDATE ${table} SET status = ?, status_reason = ?, last_check_at = ? WHERE id = ?`, [status, reason, lastCheck, id]);
+  await (db.run(`UPDATE ${table} SET status = ?, status_reason = ?, last_check_at = ? WHERE id = ?`, [status, reason, lastCheck, id]));
 }
 
-export function evaluateEntity(type, id) {
-  if (type === 'server') return evaluateServer(id);
-  if (ENTITY_TABLE[type]) return evaluateGeneric(type, id);
+export async function evaluateEntity(type, id) {
+  if (type === 'server') return await (evaluateServer(id));
+  if (ENTITY_TABLE[type]) return await (evaluateGeneric(type, id));
 }
 
 let running = false;
@@ -398,8 +398,8 @@ export async function runDueChecks({ limit = 25, concurrency = 6 } = {}) {
   running = true;
   try {
     const now = Date.now();
-    const due = db
-      .all('SELECT * FROM monitoring_checks WHERE enabled = 1 AND is_demo = 0 ORDER BY last_checked_at IS NOT NULL, last_checked_at LIMIT 200')
+    const due = await (await (db
+      .all('SELECT * FROM monitoring_checks WHERE enabled = 1 AND is_demo = 0 ORDER BY last_checked_at IS NOT NULL, last_checked_at LIMIT 200')))
       .filter((c) => !c.last_checked_at || Date.parse(c.last_checked_at) + c.interval_s * 1000 <= now)
       .slice(0, limit);
     const queue = [...due];
@@ -421,19 +421,19 @@ export async function runDueChecks({ limit = 25, concurrency = 6 } = {}) {
 }
 
 /** Uptime por comprobación en una ventana (porcentaje de resultados up/degraded). */
-export function uptime(checkId, hours) {
+export async function uptime(checkId, hours) {
   const since = new Date(Date.now() - hours * 3600_000).toISOString();
-  const r = db.get("SELECT COUNT(*) AS total, COUNT(CASE WHEN status <> 'down' THEN 1 END) AS ok, AVG(latency_ms) AS avg_latency FROM monitoring_results WHERE check_id = ? AND checked_at >= ?", [checkId, since]);
+  const r = await (db.get("SELECT COUNT(*) AS total, COUNT(CASE WHEN status <> 'down' THEN 1 END) AS ok, AVG(latency_ms) AS avg_latency FROM monitoring_results WHERE check_id = ? AND checked_at >= ?", [checkId, since]));
   return { total: r.total, pct: r.total ? Math.round((r.ok / r.total) * 10000) / 100 : null, avg_latency_ms: r.avg_latency ? Math.round(r.avg_latency) : null };
 }
 
 /** Barras horarias de disponibilidad (últimas N horas). */
-export function uptimeBars(checkId, hours = 48) {
+export async function uptimeBars(checkId, hours = 48) {
   const since = new Date(Date.now() - hours * 3600_000).toISOString();
-  const rows = db.all(
+  const rows = await (db.all(
     "SELECT substr(checked_at, 1, 13) AS hour, COUNT(*) AS total, COUNT(CASE WHEN status = 'down' THEN 1 END) AS down, COUNT(CASE WHEN status = 'degraded' THEN 1 END) AS degraded FROM monitoring_results WHERE check_id = ? AND checked_at >= ? GROUP BY 1",
     [checkId, since],
-  );
+  ));
   const map = new Map(rows.map((r) => [r.hour, r]));
   const bars = [];
   for (let i = hours - 1; i >= 0; i--) {

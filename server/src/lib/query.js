@@ -5,13 +5,13 @@ import { notFound } from './errors.js';
 
 const defined = (data) => Object.keys(data).filter((k) => data[k] !== undefined);
 
-export function insert(table, data) {
+export async function insert(table, data) {
   const keys = defined(data);
   const sql = `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${keys.map(() => '?').join(', ')})`;
-  return Number(db.run(sql, keys.map((k) => data[k])).lastInsertRowid);
+  return Number(await (await (db.run(sql, keys.map((k) => data[k])))).lastInsertRowid);
 }
 
-export function update(table, id, data, { touch = true } = {}) {
+export async function update(table, id, data, { touch = true } = {}) {
   const keys = defined(data);
   if (!keys.length) return 0;
   const sets = keys.map((k) => `${k} = ?`);
@@ -20,11 +20,11 @@ export function update(table, id, data, { touch = true } = {}) {
     sets.push('updated_at = ?');
     values.push(nowIso());
   }
-  return Number(db.run(`UPDATE ${table} SET ${sets.join(', ')} WHERE id = ?`, [...values, id]).changes);
+  return Number(await (await (db.run(`UPDATE ${table} SET ${sets.join(', ')} WHERE id = ?`, [...values, id]))).changes);
 }
 
-export function findOr404(table, id, { where = '', message } = {}) {
-  const row = db.get(`SELECT * FROM ${table} WHERE id = ? ${where}`, [id]);
+export async function findOr404(table, id, { where = '', message } = {}) {
+  const row = await (db.get(`SELECT * FROM ${table} WHERE id = ? ${where}`, [id]));
   if (!row) throw notFound(message);
   return row;
 }
@@ -35,7 +35,7 @@ export const escapeLike = (s) => String(s).replace(/[\\%_]/g, (m) => `\\${m}`);
  * Listado paginado con búsqueda, filtros y ordenación por lista blanca.
  * from puede ser una tabla con joins o una subconsulta con alias.
  */
-export function paginate(query, { select = '*', from, where = [], params = [], searchColumns = [], sortMap, defaultSort, tiebreak = 'id DESC' }) {
+export async function paginate(query, { select = '*', from, where = [], params = [], searchColumns = [], sortMap, defaultSort, tiebreak = 'id DESC' }) {
   const conditions = [...where];
   const values = [...params];
   const q = String(query.q ?? '').trim();
@@ -49,11 +49,11 @@ export function paginate(query, { select = '*', from, where = [], params = [], s
   const pageSize = Math.min(Math.max(Number.parseInt(query.pageSize, 10) || 25, 1), 500);
   const page = Math.max(Number.parseInt(query.page, 10) || 1, 1);
 
-  const total = db.value(`SELECT COUNT(*) FROM ${from} ${whereSql}`, values);
-  const items = db.all(
+  const total = await (db.value(`SELECT COUNT(*) FROM ${from} ${whereSql}`, values));
+  const items = await (db.all(
     `SELECT ${select} FROM ${from} ${whereSql} ORDER BY ${sortMap[sortKey]} ${dir.toUpperCase()} NULLS LAST, ${tiebreak} LIMIT ? OFFSET ?`,
     [...values, pageSize, (page - 1) * pageSize],
-  );
+  ));
   return { items, total, page, pageSize, sort: sortKey, dir };
 }
 

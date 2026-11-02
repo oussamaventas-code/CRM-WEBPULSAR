@@ -17,9 +17,13 @@
     "build": "npm run build -w web",
     "start": "npm run start -w server",
     "migrate": "npm run migrate -w server",
+    "db:import-supabase": "npm run db:import-supabase -w server --",
     "user:create": "npm run user:create -w server --",
     "seed:demo": "npm run seed:demo -w server",
     "backup": "npm run backup -w server",
     "test": "npm test -w server"
+  },
+  "devDependencies": {
+    "wrangler": "^4.156.0"
   }
 }

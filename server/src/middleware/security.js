@@ -1,5 +1,11 @@
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
+import { config } from '../config.js';
+
+const connectSrc = ["'self'"];
+if (config.supabaseUrl) {
+  try { connectSrc.push(new URL(config.supabaseUrl).origin); } catch { /* config validation reports an invalid URL during production start */ }
+}
 
 export const securityHeaders = helmet({
   contentSecurityPolicy: {
@@ -10,7 +16,7 @@ export const securityHeaders = helmet({
       styleSrc: ["'self'"],
       imgSrc: ["'self'", 'data:', 'blob:'],
       fontSrc: ["'self'", 'data:'],
-      connectSrc: ["'self'"],
+      connectSrc,
       objectSrc: ["'none'"],
       frameAncestors: ["'none'"],
       baseUri: ["'self'"],

@@ -65,9 +65,10 @@ router.post('/leads', publicFormLimiter, express.json({ limit: '16kb' }), async 
     .filter((line) => line != null)
     .join('\n');
 
-  const { clientId, isNew } = tx(() => {
-    const existing = db.get('SELECT id FROM clients WHERE email = ? COLLATE NOCASE AND deleted_at IS NULL ORDER BY id LIMIT 1', [data.email]);
-    const id = existing?.id ?? insert('clients', {
+  const { clientId, isNew } = await (tx(async () => {
+    const emailMatch = config.databaseUrl ? 'lower(email) = lower(?)' : 'email = ? COLLATE NOCASE';
+    const existing = await (db.get(`SELECT id FROM clients WHERE ${emailMatch} AND deleted_at IS NULL ORDER BY id LIMIT 1`, [data.email]));
+    const id = existing?.id ?? await (insert('clients', {
       name: data.name,
       company: data.company,
       email: data.email,
@@ -75,28 +76,28 @@ router.post('/leads', publicFormLimiter, express.json({ limit: '16kb' }), async 
       source,
       tags: JSON.stringify(['web']),
       status: 'pending',
-    });
-    insert('client_communications', { client_id: id, kind: 'other', subject: 'Solicitud desde la web', body, occurred_at: nowIso() });
+    }));
+    await (insert('client_communications', { client_id: id, kind: 'other', subject: 'Solicitud desde la web', body, occurred_at: nowIso() }));
     return { clientId: id, isNew: !existing };
-  });
+  }));
 
   const label = data.company ? `${data.name} (${data.company})` : data.name;
-  record(req, {
+  await (record(req, {
     action: isNew ? 'client.lead_created' : 'client.lead_received',
     entityType: 'client',
     entityId: clientId,
     clientId,
     label,
     summary: isNew ? `Nuevo cliente potencial desde la web: ${label}` : `Nueva solicitud desde la web de ${label}`,
-  });
-  notify({
+  }));
+  await (notify({
     type: 'client.lead',
     title: `Nueva solicitud web: ${label}`,
     body: data.service ? `${data.service} · ${data.email}` : data.email,
     entityType: 'client',
     entityId: clientId,
     link: `/clientes/${clientId}`,
-  });
+  }));
   res.status(201).json({ ok: true });
 });
 

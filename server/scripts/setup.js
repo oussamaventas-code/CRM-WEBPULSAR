@@ -24,9 +24,9 @@ if (!fs.existsSync(envPath)) {
 const { migrate } = await import('../src/db/migrate.js');
 const { syncRbac } = await import('../src/auth/rbac.js');
 const { db } = await import('../src/db/index.js');
-migrate();
-syncRbac();
+await migrate();
+await syncRbac();
 console.log('✓ Base de datos preparada y roles sincronizados.');
-if (!db.value('SELECT COUNT(*) FROM users')) {
+if (!await db.value('SELECT COUNT(*) FROM users')) {
   console.log('\nSiguiente paso: crea el administrador principal\n  npm run user:create -- --email tu@email.com --name "Tu nombre"\n');
 }

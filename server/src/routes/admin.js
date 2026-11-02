@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { config } from '../config.js';
 import { db, nowIso, tx } from '../db/index.js';
 import { can, confirmPassword } from '../middleware/auth.js';
 import { findOr404, insert, paginate, update } from '../lib/query.js';
@@ -17,10 +18,10 @@ import { clearDemoData, loadDemoData } from '../seed/demo.js';
 const router = Router();
 
 // ── Actividad ────────────────────────────────────────────
-router.get('/activity', can('activity.read'), (req, res) => {
+router.get('/activity', can('activity.read'), async (req, res) => {
   const where = [];
   const params = [];
-  if (!getSetting('demo').loaded) where.push('x.is_demo = 0');
+  if (!await (getSetting('demo')).loaded) where.push('x.is_demo = 0');
   if (req.query.entity_type) where.push('x.entity_type = ?') && params.push(String(req.query.entity_type));
   if (req.query.user_id) where.push('x.user_id = ?') && params.push(Number(req.query.user_id));
   if (req.query.client_id) where.push('x.client_id = ?') && params.push(Number(req.query.client_id));
@@ -28,7 +29,7 @@ router.get('/activity', can('activity.read'), (req, res) => {
   if (req.query.to) where.push('x.created_at <= ?') && params.push(`${req.query.to}T23:59:59.999Z`);
   if (req.query.action) where.push('x.action LIKE ?') && params.push(`${String(req.query.action).replace(/[%_]/g, '')}%`);
   res.json(
-    paginate(req.query, {
+    await (paginate(req.query, {
       from: '(SELECT a.*, u.name AS user_name FROM activity_logs a LEFT JOIN users u ON u.id = a.user_id) x',
       where,
       params,
@@ -36,68 +37,75 @@ router.get('/activity', can('activity.read'), (req, res) => {
       sortMap: { created_at: 'x.created_at' },
       defaultSort: ['created_at', 'desc'],
       tiebreak: 'x.id DESC',
-    }),
+    })),
   );
 });
 
-router.get('/audit', can('audit.read'), (req, res) => {
+router.get('/audit', can('audit.read'), async (req, res) => {
   res.json(
-    paginate(req.query, {
+    await (paginate(req.query, {
       from: '(SELECT a.id, a.user_id, a.action, a.entity_type, a.entity_id, a.before_data, a.after_data, a.ip, a.created_at, a.hash, u.name AS user_name FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id) x',
       searchColumns: ['x.action', 'x.entity_type', 'x.user_name'],
       sortMap: { created_at: 'x.created_at' },
       defaultSort: ['created_at', 'desc'],
       tiebreak: 'x.id DESC',
-    }),
+    })),
   );
 });
 
-router.get('/audit/verify', can('audit.read'), (_req, res) => res.json(verifyAuditChain()));
+router.get('/audit/verify', can('audit.read'), async (_req, res) => res.json(await (verifyAuditChain())));
 
-router.get('/access-logs', can('audit.read'), (req, res) => {
+router.get('/access-logs', can('audit.read'), async (req, res) => {
   res.json(
-    paginate(req.query, {
+    await (paginate(req.query, {
       from: '(SELECT l.*, u.name AS user_name FROM access_logs l LEFT JOIN users u ON u.id = l.user_id) x',
       searchColumns: ['x.email', 'x.ip', 'x.event'],
       sortMap: { created_at: 'x.created_at' },
       defaultSort: ['created_at', 'desc'],
       tiebreak: 'x.id DESC',
-    }),
+    })),
   );
 });
 
 // ── Notificaciones del usuario ───────────────────────────
-router.get('/notifications', (req, res) => {
+router.get('/notifications', async (req, res) => {
   res.json({
-    unread: db.value('SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL', [req.user.id]),
-    items: db.all('SELECT * FROM notifications WHERE user_id = ? ORDER BY read_at IS NOT NULL, created_at DESC LIMIT 40', [req.user.id]),
+    unread: await (db.value('SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL', [req.user.id])),
+    items: await (db.all('SELECT * FROM notifications WHERE user_id = ? ORDER BY read_at IS NOT NULL, created_at DESC LIMIT 40', [req.user.id])),
   });
 });
 
-router.post('/notifications/read-all', (req, res) => {
-  db.run('UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL', [nowIso(), req.user.id]);
+router.post('/notifications/read-all', async (req, res) => {
+  await (db.run('UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL', [nowIso(), req.user.id]));
   res.json({ ok: true });
 });
 
-router.post('/notifications/:id/read', (req, res) => {
-  db.run('UPDATE notifications SET read_at = COALESCE(read_at, ?) WHERE id = ? AND user_id = ?', [nowIso(), req.params.id, req.user.id]);
+router.post('/notifications/:id/read', async (req, res) => {
+  await (db.run('UPDATE notifications SET read_at = COALESCE(read_at, ?) WHERE id = ? AND user_id = ?', [nowIso(), req.params.id, req.user.id]));
   res.json({ ok: true });
 });
 
 // ── Usuarios y roles ─────────────────────────────────────
 const USER_SELECT = 'SELECT u.id, u.email, u.name, u.status, u.is_owner, u.last_login_at, u.created_at, u.locked_until, r.key AS role, r.name AS role_name FROM users u JOIN roles r ON r.id = u.role_id';
 
-router.get('/users', can('users.manage'), (_req, res) => res.json(db.all(`${USER_SELECT} ORDER BY u.is_owner DESC, u.name`)));
+router.get('/users', can('users.manage'), async (_req, res) => res.json(await (db.all(`${USER_SELECT} ORDER BY u.is_owner DESC, u.name`))));
 
-router.get('/roles', can('users.manage'), (_req, res) => {
+router.get('/roles', can('users.manage'), async (_req, res) => {
+  const roles = await Promise.all(Object.entries(ROLE_DEFINITIONS).map(async ([key, r]) => ({
+    key,
+    name: r.name,
+    description: r.description,
+    permissions: r.permissions,
+    users: await db.value('SELECT COUNT(*) FROM users u JOIN roles r ON r.id = u.role_id WHERE r.key = ?', [key]),
+  })));
   res.json({
     permissions: Object.entries(PERMISSIONS).map(([key, description]) => ({ key, description })),
-    roles: Object.entries(ROLE_DEFINITIONS).map(([key, r]) => ({ key, name: r.name, description: r.description, permissions: r.permissions, users: db.value('SELECT COUNT(*) FROM users u JOIN roles r ON r.id = u.role_id WHERE r.key = ?', [key]) })),
+    roles,
   });
 });
 
-const roleId = (key) => {
-  const id = db.value('SELECT id FROM roles WHERE key = ?', [key]);
+const roleId = async (key) => {
+  const id = await (db.value('SELECT id FROM roles WHERE key = ?', [key]));
   if (!id) throw badRequest('Rol no válido', { role: 'Rol no válido' });
   return id;
 };
@@ -109,31 +117,31 @@ router.post('/users', can('users.manage'), async (req, res) => {
     if (problem) throw badRequest(problem, { password: problem });
   }
   const hash = await hashPassword(data.password || crypto.randomUUID() + crypto.randomUUID());
-  const result = tx(() => {
-    const id = insert('users', { name: data.name, email: data.email, role_id: roleId(data.role), password_hash: hash, password_changed_at: data.password ? nowIso() : null });
-    record(req, { action: 'user.created', entityType: 'user', entityId: id, label: data.name, summary: `Usuario creado: ${data.name} (${ROLE_DEFINITIONS[data.role].name})` });
-    return { id, reset: data.password ? null : createResetToken(id, req.user.id) };
-  });
-  res.status(201).json({ user: db.get(`${USER_SELECT} WHERE u.id = ?`, [result.id]), setup_link: result.reset?.url ?? null, expires_minutes: result.reset?.expiresMinutes });
+  const result = await (tx(async () => {
+    const id = await (insert('users', { name: data.name, email: data.email, role_id: await (roleId(data.role)), password_hash: hash, password_changed_at: data.password ? nowIso() : null }));
+    await (record(req, { action: 'user.created', entityType: 'user', entityId: id, label: data.name, summary: `Usuario creado: ${data.name} (${ROLE_DEFINITIONS[data.role].name})` }));
+    return { id, reset: data.password ? null : await (createResetToken(id, req.user.id)) };
+  }));
+  res.status(201).json({ user: await (db.get(`${USER_SELECT} WHERE u.id = ?`, [result.id])), setup_link: result.reset?.url ?? null, expires_minutes: result.reset?.expiresMinutes });
 });
 
-router.patch('/users/:id', can('users.manage'), (req, res) => {
-  const user = findOr404('users', req.params.id, { message: 'Usuario no encontrado' });
+router.patch('/users/:id', can('users.manage'), async (req, res) => {
+  const user = await (findOr404('users', req.params.id, { message: 'Usuario no encontrado' }));
   const data = parse(z.object({ name: f.text(120), role: f.oneOf(Object.keys(ROLE_DEFINITIONS)), status: f.oneOf(['active', 'disabled']) }).partial(), req.body);
   if (user.is_owner && (data.status === 'disabled' || (data.role && data.role !== 'admin'))) throw conflict('El administrador principal no puede desactivarse ni perder el rol de administrador');
   if (user.id === req.user.id && data.status === 'disabled') throw conflict('No puedes desactivar tu propia cuenta');
-  tx(() => {
-    update('users', user.id, { name: data.name, status: data.status, role_id: data.role ? roleId(data.role) : undefined, ...(data.status === 'active' ? { failed_attempts: 0, locked_until: null } : {}) });
-    if (data.status === 'disabled' || data.role) destroyUserSessions(user.id);
-    record(req, { action: 'user.updated', entityType: 'user', entityId: user.id, label: user.name, summary: `Usuario actualizado: ${user.name}`, before: { name: user.name, status: user.status, role_id: user.role_id }, after: data });
-  });
-  res.json(db.get(`${USER_SELECT} WHERE u.id = ?`, [user.id]));
+  await (tx(async () => {
+    await (update('users', user.id, { name: data.name, status: data.status, role_id: data.role ? await (roleId(data.role)) : undefined, ...(data.status === 'active' ? { failed_attempts: 0, locked_until: null } : {}) }));
+    if (data.status === 'disabled' || data.role) await (destroyUserSessions(user.id));
+    await (record(req, { action: 'user.updated', entityType: 'user', entityId: user.id, label: user.name, summary: `Usuario actualizado: ${user.name}`, before: { name: user.name, status: user.status, role_id: user.role_id }, after: data }));
+  }));
+  res.json(await (db.get(`${USER_SELECT} WHERE u.id = ?`, [user.id])));
 });
 
-router.post('/users/:id/reset-link', can('users.manage'), (req, res) => {
-  const user = findOr404('users', req.params.id, { message: 'Usuario no encontrado' });
-  const reset = createResetToken(user.id, req.user.id);
-  record(req, { action: 'user.reset_link', entityType: 'user', entityId: user.id, label: user.name, summary: `Enlace de restablecimiento generado para ${user.name}` });
+router.post('/users/:id/reset-link', can('users.manage'), async (req, res) => {
+  const user = await (findOr404('users', req.params.id, { message: 'Usuario no encontrado' }));
+  const reset = await (createResetToken(user.id, req.user.id));
+  await (record(req, { action: 'user.reset_link', entityType: 'user', entityId: user.id, label: user.name, summary: `Enlace de restablecimiento generado para ${user.name}` }));
   res.setHeader('Cache-Control', 'no-store');
   res.json({ url: reset.url, expires_minutes: reset.expiresMinutes });
 });
@@ -190,55 +198,55 @@ const settingSchemas = {
   }),
 };
 
-router.get('/settings', (req, res) => {
-  const out = { invoicing: getSetting('invoicing'), company: getSetting('company'), demo: getSetting('demo') };
+router.get('/settings', async (req, res) => {
+  const out = { invoicing: await (getSetting('invoicing')), company: await (getSetting('company')), demo: await (getSetting('demo')) };
   if (req.perms.has('settings.manage') || req.perms.has('monitoring.read')) {
-    out.monitoring = getSetting('monitoring');
-    out.automations = getSetting('automations');
+    out.monitoring = await (getSetting('monitoring'));
+    out.automations = await (getSetting('automations'));
   }
   res.json(out);
 });
 
-router.put('/settings/:key', can('settings.manage'), (req, res) => {
+router.put('/settings/:key', can('settings.manage'), async (req, res) => {
   const schema = settingSchemas[req.params.key];
   if (!schema) throw badRequest('Ajuste desconocido');
   const data = parse(schema, { ...SETTING_DEFAULTS[req.params.key], ...req.body });
   if (req.params.key === 'invoicing' && !data.tax_rates.includes(data.default_tax_rate)) throw badRequest('El IVA por defecto debe estar en la lista', { default_tax_rate: 'No está en la lista' });
-  const before = getSetting(req.params.key);
-  const saved = setSetting(req.params.key, data, req.user.id);
-  record(req, { action: 'settings.updated', entityType: 'settings', label: req.params.key, summary: `Configuración actualizada: ${{ company: 'empresa', invoicing: 'facturación', monitoring: 'umbrales de monitorización', automations: 'automatizaciones' }[req.params.key]}`, before, after: data });
+  const before = await (getSetting(req.params.key));
+  const saved = await (setSetting(req.params.key, data, req.user.id));
+  await (record(req, { action: 'settings.updated', entityType: 'settings', label: req.params.key, summary: `Configuración actualizada: ${{ company: 'empresa', invoicing: 'facturación', monitoring: 'umbrales de monitorización', automations: 'automatizaciones' }[req.params.key]}`, before, after: data }));
   res.json(saved);
 });
 
 // ── Copias de seguridad ──────────────────────────────────
-router.get('/backups', can('backups.manage'), (_req, res) => {
-  res.json({ backups: listBackups(), last_jobs: db.all("SELECT job, status, started_at, finished_at, details FROM job_runs WHERE job IN ('maintenance', 'automations', 'integrations') ORDER BY id DESC LIMIT 10") });
+router.get('/backups', can('backups.manage'), async (_req, res) => {
+  res.json({ provider: config.databaseUrl ? 'supabase' : 'local', backups: listBackups(), last_jobs: await (db.all("SELECT job, status, started_at, finished_at, details FROM job_runs WHERE job IN ('maintenance', 'automations', 'integrations') ORDER BY id DESC LIMIT 10")) });
 });
 
-router.post('/backups', can('backups.manage'), (req, res) => {
-  const backup = createBackup();
-  record(req, { action: 'backup.created', entityType: 'backup', label: backup.name, summary: `Copia de seguridad creada: ${backup.name}` });
+router.post('/backups', can('backups.manage'), async (req, res) => {
+  const backup = await (createBackup());
+  await (record(req, { action: 'backup.created', entityType: 'backup', label: backup.name, summary: `Copia de seguridad creada: ${backup.name}` }));
   res.status(201).json(backup);
 });
 
-router.get('/backups/:name/download', can('backups.manage'), (req, res) => {
+router.get('/backups/:name/download', can('backups.manage'), async (req, res) => {
   const file = backupPath(req.params.name);
   if (!file) throw notFound('Copia no encontrada');
-  record(req, { action: 'backup.downloaded', entityType: 'backup', label: req.params.name, summary: `Copia de seguridad descargada: ${req.params.name}` });
+  await (record(req, { action: 'backup.downloaded', entityType: 'backup', label: req.params.name, summary: `Copia de seguridad descargada: ${req.params.name}` }));
   res.setHeader('Cache-Control', 'no-store');
   res.download(file, req.params.name);
 });
 
 // ── Datos DEMO ───────────────────────────────────────────
-router.post('/demo/load', can('backups.manage'), (req, res) => {
-  if (getSetting('demo').loaded) throw conflict('Los datos DEMO ya están cargados');
-  const summary = loadDemoData(req);
+router.post('/demo/load', can('backups.manage'), async (req, res) => {
+  if (await (getSetting('demo')).loaded) throw conflict('Los datos DEMO ya están cargados');
+  const summary = await (loadDemoData(req));
   res.json(summary);
 });
 
 router.post('/demo/clear', can('backups.manage'), async (req, res) => {
   await confirmPassword(req, req.body?.password);
-  const summary = clearDemoData(req);
+  const summary = await (clearDemoData(req));
   res.json(summary);
 });
 

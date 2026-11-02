@@ -8,6 +8,7 @@ import { Badge, Button, Chips, DemoTag, EmptyState, IconButton, LabelBadge, Menu
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { api, download, emitRefresh } from '../lib/api.js';
+import { cancelDirectUpload, uploadFileDirect } from '../lib/direct-upload.js';
 import { useApi, useDebounced, useLookups } from '../lib/hooks.js';
 import { bytes, date, daysUntil, isDemoLabel, money, relative, todayIso } from '../lib/format.js';
 import {
@@ -379,7 +380,7 @@ function UploadModal({ open, onClose, clientId, projectId }) {
         onClose();
       }}
       title="Subir documento"
-      subtitle="Máximo 25 MB. Los archivos se guardan en privado y solo se descargan con sesión iniciada."
+      subtitle="Máximo 25 MB. El archivo se sube directamente al almacenamiento privado y solo se descarga con sesión iniciada."
       icon={Upload}
       fields={[
         { name: 'title', label: 'Título', placeholder: 'Por defecto, el nombre del archivo', span: 2 },
@@ -391,6 +392,19 @@ function UploadModal({ open, onClose, clientId, projectId }) {
       ]}
       onSubmit={async (v) => {
         if (!file) throw Object.assign(new Error('Selecciona un archivo'), { fields: { file: 'Obligatorio' } });
+        const direct = await uploadFileDirect(file);
+        if (direct) {
+          try {
+            await api.post('/documents/complete', { ...direct, ...v });
+          } catch (error) {
+            await cancelDirectUpload(direct.storage_key);
+            throw error;
+          }
+          toast.success('Documento subido');
+          setFile(null);
+          emitRefresh();
+          return;
+        }
         const form = new FormData();
         form.append('file', file);
         Object.entries(v).forEach(([k, val]) => val != null && form.append(k, Array.isArray(val) ? val.join(',') : val));

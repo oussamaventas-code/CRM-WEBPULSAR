@@ -24,13 +24,13 @@ const serviceSchema = z.object({
   status: f.oneOf(['active', 'inactive']).default('active'),
 });
 
-router.get('/', can('services.read'), (req, res) => {
+router.get('/', can('services.read'), async (req, res) => {
   const where = [];
   const params = [];
   if (SERVICE_CATEGORIES.includes(req.query.category)) where.push('x.category = ?') && params.push(req.query.category);
   if (req.query.status === 'active' || req.query.status === 'inactive') where.push('x.status = ?') && params.push(req.query.status);
   res.json(
-    paginate(req.query, {
+    await (paginate(req.query, {
       from: `(SELECT s.*, (SELECT COUNT(*) FROM client_services cs WHERE cs.service_id = s.id AND cs.status = 'active') AS active_clients FROM services s) x`,
       where,
       params,
@@ -38,38 +38,38 @@ router.get('/', can('services.read'), (req, res) => {
       sortMap: { name: 'x.name COLLATE NOCASE', category: 'x.category', price: 'x.price_cents', clients: 'x.active_clients', created_at: 'x.created_at' },
       defaultSort: ['name', 'asc'],
       tiebreak: 'x.id DESC',
-    }),
+    })),
   );
 });
 
-router.post('/', can('services.write'), (req, res) => {
+router.post('/', can('services.write'), async (req, res) => {
   const data = parse(serviceSchema, req.body);
-  const id = tx(() => {
-    const newId = insert('services', data);
-    record(req, { action: 'service.created', entityType: 'service', entityId: newId, label: data.name, summary: `Servicio añadido al catálogo: ${data.name}`, after: data });
+  const id = await (tx(async () => {
+    const newId = await (insert('services', data));
+    await (record(req, { action: 'service.created', entityType: 'service', entityId: newId, label: data.name, summary: `Servicio añadido al catálogo: ${data.name}`, after: data }));
     return newId;
-  });
-  res.status(201).json(db.get('SELECT * FROM services WHERE id = ?', [id]));
+  }));
+  res.status(201).json(await (db.get('SELECT * FROM services WHERE id = ?', [id])));
 });
 
-router.patch('/:id', can('services.write'), (req, res) => {
-  const before = findOr404('services', req.params.id, { message: 'Servicio no encontrado' });
+router.patch('/:id', can('services.write'), async (req, res) => {
+  const before = await (findOr404('services', req.params.id, { message: 'Servicio no encontrado' }));
   const data = parse(serviceSchema.partial(), req.body);
-  tx(() => {
-    update('services', before.id, data);
-    record(req, { action: 'service.updated', entityType: 'service', entityId: before.id, label: before.name, summary: `Servicio actualizado: ${before.name}`, before, after: data });
-  });
-  res.json(db.get('SELECT * FROM services WHERE id = ?', [before.id]));
+  await (tx(async () => {
+    await (update('services', before.id, data));
+    await (record(req, { action: 'service.updated', entityType: 'service', entityId: before.id, label: before.name, summary: `Servicio actualizado: ${before.name}`, before, after: data }));
+  }));
+  res.json(await (db.get('SELECT * FROM services WHERE id = ?', [before.id])));
 });
 
-router.delete('/:id', can('services.write'), (req, res) => {
-  const service = findOr404('services', req.params.id, { message: 'Servicio no encontrado' });
-  const used = db.value('SELECT (SELECT COUNT(*) FROM client_services WHERE service_id = ?) + (SELECT COUNT(*) FROM invoice_items WHERE service_id = ?)', [service.id, service.id]);
+router.delete('/:id', can('services.write'), async (req, res) => {
+  const service = await (findOr404('services', req.params.id, { message: 'Servicio no encontrado' }));
+  const used = await (db.value('SELECT (SELECT COUNT(*) FROM client_services WHERE service_id = ?) + (SELECT COUNT(*) FROM invoice_items WHERE service_id = ?)', [service.id, service.id]));
   if (used) throw conflict('El servicio está contratado o facturado. Márcalo como inactivo en lugar de eliminarlo.');
-  tx(() => {
-    db.run('DELETE FROM services WHERE id = ?', [service.id]);
-    record(req, { action: 'service.deleted', entityType: 'service', entityId: service.id, label: service.name, summary: `Servicio eliminado del catálogo: ${service.name}`, before: service });
-  });
+  await (tx(async () => {
+    await (db.run('DELETE FROM services WHERE id = ?', [service.id]));
+    await (record(req, { action: 'service.deleted', entityType: 'service', entityId: service.id, label: service.name, summary: `Servicio eliminado del catálogo: ${service.name}`, before: service }));
+  }));
   res.json({ ok: true });
 });
 
@@ -92,30 +92,30 @@ const assignSchema = z.object({
 const CS_SELECT = `SELECT cs.*, s.name AS service_name, s.category, c.name AS client_name, c.company AS client_company, p.name AS project_name
   FROM client_services cs JOIN services s ON s.id = cs.service_id JOIN clients c ON c.id = cs.client_id LEFT JOIN projects p ON p.id = cs.project_id`;
 
-clientServiceRouter.get('/', can('services.read'), (req, res) => {
+clientServiceRouter.get('/', can('services.read'), async (req, res) => {
   const where = ['c.deleted_at IS NULL'];
   const params = [];
   if (req.query.client_id) where.push('cs.client_id = ?') && params.push(Number(req.query.client_id));
   if (req.query.service_id) where.push('cs.service_id = ?') && params.push(Number(req.query.service_id));
   if (req.query.status) where.push('cs.status = ?') && params.push(String(req.query.status));
-  res.json(db.all(`${CS_SELECT} WHERE ${where.join(' AND ')} ORDER BY cs.status = 'active' DESC, cs.start_date DESC, cs.id DESC`, params));
+  res.json(await (db.all(`${CS_SELECT} WHERE ${where.join(' AND ')} ORDER BY cs.status = 'active' DESC, cs.start_date DESC, cs.id DESC`, params)));
 });
 
-clientServiceRouter.post('/', can('services.write'), (req, res) => {
+clientServiceRouter.post('/', can('services.write'), async (req, res) => {
   const data = parse(assignSchema, req.body);
-  const service = findOr404('services', data.service_id, { message: 'Servicio no encontrado' });
-  const client = db.get('SELECT * FROM clients WHERE id = ? AND deleted_at IS NULL', [data.client_id]);
+  const service = await (findOr404('services', data.service_id, { message: 'Servicio no encontrado' }));
+  const client = await (db.get('SELECT * FROM clients WHERE id = ? AND deleted_at IS NULL', [data.client_id]));
   if (!client) throw badRequest('Cliente no válido', { client_id: 'Cliente no válido' });
   const period = data.billing_period ?? service.billing_period;
   if (data.create_recurring && !FREQ_FROM_PERIOD[period]) throw badRequest('Solo los servicios periódicos generan cobros recurrentes', { create_recurring: 'El servicio no es periódico' });
   if (data.create_recurring && !req.perms.has('finance.write')) throw badRequest('No tienes permiso para crear cobros recurrentes');
 
-  const id = tx(() => {
+  const id = await (tx(async () => {
     const { create_recurring, ...rest } = data;
-    const newId = insert('client_services', { ...rest, price_cents: data.price_cents ?? service.price_cents, billing_period: period, start_date: data.start_date ?? today() });
+    const newId = await (insert('client_services', { ...rest, price_cents: data.price_cents ?? service.price_cents, billing_period: period, start_date: data.start_date ?? today() }));
     if (create_recurring) {
       const start = data.start_date ?? today();
-      insert('recurring_payments', {
+      await (insert('recurring_payments', {
         client_id: client.id,
         client_service_id: newId,
         project_id: data.project_id,
@@ -127,26 +127,26 @@ clientServiceRouter.post('/', can('services.write'), (req, res) => {
         next_due_date: start,
         end_date: data.end_date,
         created_by: req.user.id,
-      });
+      }));
     }
-    record(req, { action: 'client_service.created', entityType: 'client', entityId: client.id, clientId: client.id, label: client.name, summary: `Servicio contratado por ${client.name}: ${service.name}` });
+    await (record(req, { action: 'client_service.created', entityType: 'client', entityId: client.id, clientId: client.id, label: client.name, summary: `Servicio contratado por ${client.name}: ${service.name}` }));
     return newId;
-  });
-  res.status(201).json(db.get(`${CS_SELECT} WHERE cs.id = ?`, [id]));
+  }));
+  res.status(201).json(await (db.get(`${CS_SELECT} WHERE cs.id = ?`, [id])));
 });
 
-clientServiceRouter.patch('/:id', can('services.write'), (req, res) => {
-  const before = findOr404('client_services', req.params.id, { message: 'Contratación no encontrada' });
+clientServiceRouter.patch('/:id', can('services.write'), async (req, res) => {
+  const before = await (findOr404('client_services', req.params.id, { message: 'Contratación no encontrada' }));
   const { create_recurring: _ignored, ...data } = parse(assignSchema.partial(), req.body);
   delete data.client_id;
-  tx(() => {
-    update('client_services', before.id, data);
+  await (tx(async () => {
+    await (update('client_services', before.id, data));
     if (data.status && data.status !== 'active' && data.status !== before.status) {
-      db.run("UPDATE recurring_payments SET status = CASE WHEN ? = 'paused' THEN 'paused' ELSE 'cancelled' END WHERE client_service_id = ? AND status = 'active'", [data.status, before.id]);
+      await (db.run("UPDATE recurring_payments SET status = CASE WHEN ? = 'paused' THEN 'paused' ELSE 'cancelled' END WHERE client_service_id = ? AND status = 'active'", [data.status, before.id]));
     }
-    record(req, { action: 'client_service.updated', entityType: 'client', entityId: before.client_id, clientId: before.client_id, summary: 'Servicio contratado actualizado', before, after: data });
-  });
-  res.json(db.get(`${CS_SELECT} WHERE cs.id = ?`, [before.id]));
+    await (record(req, { action: 'client_service.updated', entityType: 'client', entityId: before.client_id, clientId: before.client_id, summary: 'Servicio contratado actualizado', before, after: data }));
+  }));
+  res.json(await (db.get(`${CS_SELECT} WHERE cs.id = ?`, [before.id])));
 });
 
 export default router;

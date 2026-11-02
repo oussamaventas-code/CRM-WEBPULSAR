@@ -53,18 +53,18 @@ export const SETTING_DEFAULTS = {
   demo: { loaded: false, loaded_at: null },
 };
 
-export function getSetting(key) {
-  const row = db.get('SELECT value FROM settings WHERE key = ?', [key]);
+export async function getSetting(key) {
+  const row = await (db.get('SELECT value FROM settings WHERE key = ?', [key]));
   const stored = parseJson(row?.value, {});
   const defaults = SETTING_DEFAULTS[key] ?? {};
   return Array.isArray(defaults) ? stored : { ...defaults, ...stored };
 }
 
-export function setSetting(key, value, userId = null) {
-  db.run(
+export async function setSetting(key, value, userId = null) {
+  await (db.run(
     `INSERT INTO settings (key, value, updated_by, updated_at) VALUES (?, ?, ?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
     [key, JSON.stringify(value), userId, nowIso()],
-  );
-  return getSetting(key);
+  ));
+  return await (getSetting(key));
 }

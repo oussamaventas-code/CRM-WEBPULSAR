@@ -12,23 +12,31 @@ import { today } from '../lib/dates.js';
 const SYSTEM = { system: true };
 
 async function tracked(job, fn) {
-  const id = Number(db.run("INSERT INTO job_runs (job, status, started_at) VALUES (?, 'running', ?)", [job, nowIso()]).lastInsertRowid);
+  const id = Number(await (await (db.run("INSERT INTO job_runs (job, status, started_at) VALUES (?, 'running', ?)", [job, nowIso()]))).lastInsertRowid);
   try {
     const details = await fn();
-    db.run("UPDATE job_runs SET status = 'ok', finished_at = ?, details = ? WHERE id = ?", [nowIso(), details ? JSON.stringify(details).slice(0, 2000) : null, id]);
+    await (db.run("UPDATE job_runs SET status = 'ok', finished_at = ?, details = ? WHERE id = ?", [nowIso(), details ? JSON.stringify(details).slice(0, 2000) : null, id]));
   } catch (err) {
     console.error(`[scheduler] ${job}:`, err.message);
-    db.run("UPDATE job_runs SET status = 'error', finished_at = ?, details = ? WHERE id = ?", [nowIso(), err.message.slice(0, 2000), id]);
+    await (db.run("UPDATE job_runs SET status = 'error', finished_at = ?, details = ? WHERE id = ?", [nowIso(), err.message.slice(0, 2000), id]));
   }
 }
 
+export async function runScheduledTask(task) {
+  if (task === 'monitoring') return runDueChecks();
+  if (task === 'automations') return tracked('automations', async () => runAutomations());
+  if (task === 'integrations') return tracked('integrations', syncDueIntegrations);
+  if (task === 'maintenance') return tracked('maintenance', maintenance);
+  throw new Error('Tarea programada no reconocida');
+}
+
 async function syncDueIntegrations() {
-  const hours = Number(getSetting('automations').integration_sync_hours || 0);
+  const hours = Number(await (getSetting('automations')).integration_sync_hours || 0);
   if (!hours) return { skipped: true };
   const done = {};
   for (const key of ['hostinger', 'cloudflare']) {
-    if (!hasCredential(key)) continue;
-    const last = getIntegration(key)?.last_sync_at;
+    if (!await (hasCredential(key))) continue;
+    const last = await (getIntegration(key))?.last_sync_at;
     if (last && Date.now() - Date.parse(last) < hours * 3600_000) continue;
     try {
       await syncIntegration(SYSTEM, key);
@@ -40,24 +48,24 @@ async function syncDueIntegrations() {
   return done;
 }
 
-function maintenance() {
-  const m = getSetting('monitoring');
+async function maintenance() {
+  const m = await (getSetting('monitoring'));
   const days = (n) => new Date(Date.now() - n * 86400_000).toISOString();
   const out = {
-    results: Number(db.run('DELETE FROM monitoring_results WHERE checked_at < ?', [days(m.results_retention_days)]).changes),
-    metrics: Number(db.run('DELETE FROM server_metrics WHERE collected_at < ?', [days(m.metrics_retention_days)]).changes),
-    notifications: Number(db.run('DELETE FROM notifications WHERE read_at IS NOT NULL AND created_at < ?', [days(90)]).changes),
-    jobs: Number(db.run('DELETE FROM job_runs WHERE started_at < ?', [days(30)]).changes),
-    sessions: Number(purgeExpiredSessions().changes),
+    results: Number(await (await (db.run('DELETE FROM monitoring_results WHERE checked_at < ?', [days(m.results_retention_days)]))).changes),
+    metrics: Number(await (await (db.run('DELETE FROM server_metrics WHERE collected_at < ?', [days(m.metrics_retention_days)]))).changes),
+    notifications: Number(await (await (db.run('DELETE FROM notifications WHERE read_at IS NOT NULL AND created_at < ?', [days(90)]))).changes),
+    jobs: Number(await (await (db.run('DELETE FROM job_runs WHERE started_at < ?', [days(30)]))).changes),
+    sessions: Number(await (await (purgeExpiredSessions())).changes),
   };
   return out;
 }
 
-function backupIfDue() {
+async function backupIfDue() {
   const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Madrid', hour: '2-digit', hour12: false }).format(new Date()));
   const stamp = today().replaceAll('-', '');
   const already = listBackups().some((b) => b.name.includes(`-${stamp}-`));
-  if (hour >= config.backups.hour && !already) return createBackup();
+  if (hour >= config.backups.hour && !already) return await (createBackup());
   return null;
 }
 
@@ -78,13 +86,13 @@ export function startScheduler() {
       monitoring = false;
     }
   });
-  every(15 * 60_000, () => tracked('automations', () => runAutomations()));
-  every(60 * 60_000, () => tracked('integrations', syncDueIntegrations));
-  every(60 * 60_000, () => tracked('maintenance', () => ({ ...maintenance(), backup: backupIfDue() })));
+  every(15 * 60_000, async () => await (tracked('automations', async () => await (runAutomations()))));
+  every(60 * 60_000, async () => await (tracked('integrations', syncDueIntegrations)));
+  every(60 * 60_000, async () => await (tracked('maintenance', async () => ({ ...await (maintenance()), backup: await (backupIfDue()) }))));
   // Primera ejecución poco después del arranque
-  setTimeout(() => tracked('automations', () => runAutomations()), 5_000).unref();
-  setTimeout(() => tracked('maintenance', () => ({ ...maintenance(), backup: backupIfDue() })), 20_000).unref();
-  setTimeout(() => tracked('integrations', syncDueIntegrations), 30_000).unref();
+  setTimeout(async () => await (tracked('automations', async () => await (runAutomations()))), 5_000).unref();
+  setTimeout(async () => await (tracked('maintenance', async () => ({ ...await (maintenance()), backup: await (backupIfDue()) }))), 20_000).unref();
+  setTimeout(async () => await (tracked('integrations', syncDueIntegrations)), 30_000).unref();
   console.log('[scheduler] Monitorización, automatizaciones y copias programadas activas');
 }
 

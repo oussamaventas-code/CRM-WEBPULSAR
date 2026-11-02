@@ -27,7 +27,7 @@ async function cfAll(path, token, perPage = 50) {
   return out;
 }
 
-const providerId = () => db.value("SELECT id FROM providers WHERE key = 'cloudflare'");
+const providerId = async () => await (db.value("SELECT id FROM providers WHERE key = 'cloudflare'"));
 
 async function verifyToken(token, accountHint) {
   try {
@@ -72,39 +72,39 @@ export async function verifyCloudflare(token, accountHint) {
   return { capabilities, accounts: accounts.map((a) => ({ id: a.id, name: a.name })) };
 }
 
-function upsertByExternal(table, pid, externalId, fields) {
-  const existing = db.get(`SELECT id FROM ${table} WHERE provider_id = ? AND external_id = ?`, [pid, externalId]);
+async function upsertByExternal(table, pid, externalId, fields) {
+  const existing = await (db.get(`SELECT id FROM ${table} WHERE provider_id = ? AND external_id = ?`, [pid, externalId]));
   const keys = Object.keys(fields);
   if (existing) {
-    db.run(`UPDATE ${table} SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_at = ? WHERE id = ?`, [...keys.map((k) => fields[k]), nowIso(), existing.id]);
+    await (db.run(`UPDATE ${table} SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_at = ? WHERE id = ?`, [...keys.map((k) => fields[k]), nowIso(), existing.id]));
     return { id: existing.id, created: false };
   }
-  const res = db.run(`INSERT INTO ${table} (provider_id, external_id, ${keys.join(', ')}) VALUES (?, ?, ${keys.map(() => '?').join(', ')})`, [pid, externalId, ...keys.map((k) => fields[k])]);
+  const res = await (db.run(`INSERT INTO ${table} (provider_id, external_id, ${keys.join(', ')}) VALUES (?, ?, ${keys.map(() => '?').join(', ')})`, [pid, externalId, ...keys.map((k) => fields[k])]));
   return { id: Number(res.lastInsertRowid), created: true };
 }
 
-export function replaceDnsRecords(domainId, records) {
+export async function replaceDnsRecords(domainId, records) {
   const now = nowIso();
-  tx(() => {
+  await (tx(async () => {
     const keep = new Set();
     for (const r of records) {
       keep.add(r.id);
-      db.run(
+      await (db.run(
         `INSERT INTO dns_records (domain_id, source, external_id, type, name, content, ttl, proxied, priority, comment, synced_at)
          VALUES (?, 'cloudflare', ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(domain_id, source, external_id) DO UPDATE SET type = excluded.type, name = excluded.name, content = excluded.content,
            ttl = excluded.ttl, proxied = excluded.proxied, priority = excluded.priority, comment = excluded.comment, synced_at = excluded.synced_at`,
         [domainId, r.id, r.type, r.name, r.content, r.ttl ?? null, r.proxiable === false ? null : r.proxied ? 1 : 0, r.priority ?? null, r.comment ?? null, now],
-      );
+      ));
     }
-    for (const row of db.all("SELECT id, external_id FROM dns_records WHERE domain_id = ? AND source = 'cloudflare'", [domainId])) {
-      if (!keep.has(row.external_id)) db.run('DELETE FROM dns_records WHERE id = ?', [row.id]);
+    for (const row of await (db.all("SELECT id, external_id FROM dns_records WHERE domain_id = ? AND source = 'cloudflare'", [domainId]))) {
+      if (!keep.has(row.external_id)) await (db.run('DELETE FROM dns_records WHERE id = ?', [row.id]));
     }
-  });
+  }));
 }
 
 async function syncZone(token, zone, report) {
-  const existing = db.get('SELECT id FROM domains WHERE name = ?', [zone.name]);
+  const existing = await (db.get('SELECT id FROM domains WHERE name = ?', [zone.name]));
   const fields = {
     dns_provider: 'cloudflare',
     cloudflare_zone_id: zone.id,
@@ -116,23 +116,23 @@ async function syncZone(token, zone, report) {
   let domainId;
   if (existing) {
     const keys = Object.keys(fields);
-    db.run(`UPDATE domains SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_at = ? WHERE id = ?`, [...keys.map((k) => fields[k]), nowIso(), existing.id]);
+    await (db.run(`UPDATE domains SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_at = ? WHERE id = ?`, [...keys.map((k) => fields[k]), nowIso(), existing.id]));
     domainId = existing.id;
     report.zones.updated += 1;
   } else {
     const keys = Object.keys(fields);
-    domainId = Number(db.run(`INSERT INTO domains (name, ${keys.join(', ')}) VALUES (?, ${keys.map(() => '?').join(', ')})`, [zone.name, ...keys.map((k) => fields[k])]).lastInsertRowid);
+    domainId = Number(await (await (db.run(`INSERT INTO domains (name, ${keys.join(', ')}) VALUES (?, ${keys.map(() => '?').join(', ')})`, [zone.name, ...keys.map((k) => fields[k])]))).lastInsertRowid);
     report.zones.created += 1;
   }
   try {
     const ssl = await cf(`/zones/${zone.id}/settings/ssl`, token);
-    db.run('UPDATE domains SET ssl_mode = ? WHERE id = ?', [ssl.result?.value ?? null, domainId]);
+    await (db.run('UPDATE domains SET ssl_mode = ? WHERE id = ?', [ssl.result?.value ?? null, domainId]));
   } catch (err) {
     report.warnings.add(`Modo SSL no disponible (permiso Zone Settings:Read): ${err.message}`);
   }
   try {
     const records = await cfAll(`/zones/${zone.id}/dns_records`, token, 100);
-    replaceDnsRecords(domainId, records);
+    await (replaceDnsRecords(domainId, records));
     report.dns_records += records.length;
   } catch (err) {
     report.warnings.add(`Registros DNS no disponibles (permiso DNS:Read): ${err.message}`);
@@ -141,10 +141,10 @@ async function syncZone(token, zone, report) {
 
 /** Sincroniza cuentas, zonas, DNS, SSL, Workers, D1 y R2. */
 export async function syncCloudflare() {
-  const token = getCredential('cloudflare');
+  const token = await (getCredential('cloudflare'));
   if (!token) throw new ProviderError(P, 0, 'Cloudflare no está configurado');
-  const integration = getIntegration('cloudflare');
-  const pid = providerId();
+  const integration = await (getIntegration('cloudflare'));
+  const pid = await (providerId());
   const report = { accounts: 0, zones: { created: 0, updated: 0 }, dns_records: 0, workers: 0, d1: 0, r2: 0, warnings: new Set() };
 
   let accounts = [];
@@ -157,7 +157,7 @@ export async function syncCloudflare() {
   const hint = integration?.config?.account_id || null;
   if (!accounts.length && hint) accounts = [{ id: hint, name: hint }];
   for (const a of accounts) {
-    upsertByExternal('infrastructure_accounts', pid, a.id, { name: a.name, integration_id: integration?.id ?? null });
+    await (upsertByExternal('infrastructure_accounts', pid, a.id, { name: a.name, integration_id: integration?.id ?? null }));
   }
   report.accounts = accounts.length;
 
@@ -174,7 +174,7 @@ export async function syncCloudflare() {
     try {
       const scripts = (await cf(`/accounts/${a.id}/workers/scripts`, token)).result ?? [];
       for (const s of scripts) {
-        upsertByExternal('applications', pid, `worker:${a.id}:${s.id}`, { name: s.id, kind: 'worker', source: 'cloudflare', runtime: 'Cloudflare Workers' });
+        await (upsertByExternal('applications', pid, `worker:${a.id}:${s.id}`, { name: s.id, kind: 'worker', source: 'cloudflare', runtime: 'Cloudflare Workers' }));
       }
       report.workers += scripts.length;
     } catch (err) {
@@ -183,14 +183,14 @@ export async function syncCloudflare() {
     try {
       const dbs = await cfAll(`/accounts/${a.id}/d1/database`, token);
       for (const d of dbs) {
-        upsertByExternal('databases', pid, d.uuid, {
+        await (upsertByExternal('databases', pid, d.uuid, {
           name: d.name,
           engine: 'd1',
           source: 'cloudflare',
           provider_created_at: d.created_at ?? null,
           size_bytes: d.file_size ?? null,
           region: d.running_in_region ?? null,
-        });
+        }));
       }
       report.d1 += dbs.length;
     } catch (err) {
@@ -199,7 +199,7 @@ export async function syncCloudflare() {
     try {
       const buckets = (await cf(`/accounts/${a.id}/r2/buckets?per_page=100`, token)).result?.buckets ?? [];
       for (const b of buckets) {
-        upsertByExternal('storage_buckets', pid, `${a.id}:${b.name}`, { name: b.name, location: b.location ?? null, provider_created_at: b.creation_date ?? null });
+        await (upsertByExternal('storage_buckets', pid, `${a.id}:${b.name}`, { name: b.name, location: b.location ?? null, provider_created_at: b.creation_date ?? null }));
       }
       report.r2 += buckets.length;
     } catch (err) {
@@ -210,43 +210,43 @@ export async function syncCloudflare() {
   return { report: { ...report, warnings: [...report.warnings] } };
 }
 
-function zoneOf(domain) {
+async function zoneOf(domain) {
   if (!domain.cloudflare_zone_id) throw new ProviderError(P, 400, 'Este dominio no está vinculado a una zona de Cloudflare. Sincroniza Cloudflare primero.');
-  const token = getCredential('cloudflare');
+  const token = await (getCredential('cloudflare'));
   if (!token) throw new ProviderError(P, 0, 'Cloudflare no está configurado');
   return { zone: domain.cloudflare_zone_id, token };
 }
 
 export async function createDnsRecord(domain, record) {
-  const { zone, token } = zoneOf(domain);
+  const { zone, token } = await (zoneOf(domain));
   const res = await cf(`/zones/${zone}/dns_records`, token, { method: 'POST', body: record });
   return res.result;
 }
 
 export async function updateDnsRecord(domain, externalId, changes) {
-  const { zone, token } = zoneOf(domain);
+  const { zone, token } = await (zoneOf(domain));
   const res = await cf(`/zones/${zone}/dns_records/${encodeURIComponent(externalId)}`, token, { method: 'PATCH', body: changes });
   return res.result;
 }
 
 export async function deleteDnsRecord(domain, externalId) {
-  const { zone, token } = zoneOf(domain);
+  const { zone, token } = await (zoneOf(domain));
   await cf(`/zones/${zone}/dns_records/${encodeURIComponent(externalId)}`, token, { method: 'DELETE' });
 }
 
 export async function refreshZoneRecords(domain) {
-  const { zone, token } = zoneOf(domain);
+  const { zone, token } = await (zoneOf(domain));
   const records = await cfAll(`/zones/${zone}/dns_records`, token, 100);
-  replaceDnsRecords(domain.id, records);
+  await (replaceDnsRecords(domain.id, records));
   return records.length;
 }
 
 /** Ejecuta SELECT 1 en una base de datos D1: verifica disponibilidad real de consultas. */
 export async function d1Ping(database) {
-  const token = getCredential('cloudflare');
+  const token = await (getCredential('cloudflare'));
   if (!token) throw new ProviderError(P, 0, 'Cloudflare no está configurado');
-  const accounts = db.all('SELECT external_id FROM infrastructure_accounts WHERE provider_id = ? ORDER BY id', [providerId()]).map((a) => a.external_id);
-  const hint = getIntegration('cloudflare')?.config?.account_id;
+  const accounts = await (await (db.all('SELECT external_id FROM infrastructure_accounts WHERE provider_id = ? ORDER BY id', [await (providerId())]))).map((a) => a.external_id);
+  const hint = await (await (getIntegration('cloudflare')))?.config?.account_id;
   if (hint && !accounts.includes(hint)) accounts.unshift(hint);
   if (!accounts.length) throw new ProviderError(P, 400, 'No se conoce la cuenta de Cloudflare de esta base de datos');
   let lastError;

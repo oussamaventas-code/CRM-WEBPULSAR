@@ -4,8 +4,12 @@ CRM/ERP privado de Web Pulsar: clientes, proyectos, servicios, finanzas y factur
 
 - **Frontend:** React 19 · Tailwind CSS 3.4.17 · Lucide React · GSAP 3 (`useGSAP` / `gsap.context()` con `revert()`)
 - **Backend:** Node.js 22 · Express 5 · API REST modular · validación con Zod · permisos en servidor
-- **Base de datos:** SQLite (motor integrado `node:sqlite`, SQL compatible con Cloudflare D1) · migraciones versionadas
-- **Infraestructura objetivo:** Hostinger VPS + Nginx + Cloudflare (DNS, proxy y SSL)
+- **Base de datos:** SQLite en local o Supabase PostgreSQL en Vercel · migraciones versionadas
+- **Despliegue:** Hostinger VPS + Nginx o Vercel (API y CRM como servicios del mismo proyecto; web pública como proyecto separado)
+
+## Despliegue en Vercel y Supabase
+
+Consulta [docs/VERCEL_SUPABASE.md](docs/VERCEL_SUPABASE.md) para configurar ambos proyectos Vercel, Supabase PostgreSQL y Storage e importar la base SQLite local conservando sus datos.
 
 > Todo empieza vacío: no hay cifras ni clientes inventados. Los datos de demostración son opcionales, van marcados como **DEMO** y se eliminan con un clic.
 
