@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { config } from '../config.js';
 import { getConnection } from './index.js';
+import { migratePostgres } from './migrate-postgres.js';
 
 /**
  * Aplica en orden las migraciones versionadas (NNN_nombre.sql) que no estén registradas.
@@ -10,6 +11,7 @@ import { getConnection } from './index.js';
  * modificaciones posteriores de archivos ya aplicados.
  */
 export function migrate({ log = console.log } = {}) {
+  if (config.databaseUrl) return migratePostgres({ log });
   const c = getConnection();
   c.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY,

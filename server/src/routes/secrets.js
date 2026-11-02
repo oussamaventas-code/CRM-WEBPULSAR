@@ -29,52 +29,52 @@ const SELECT = `SELECT s.id, s.label, s.kind, s.client_id, s.project_id, s.serve
   FROM secrets s LEFT JOIN clients c ON c.id = s.client_id LEFT JOIN projects p ON p.id = s.project_id
   LEFT JOIN servers sv ON sv.id = s.server_id LEFT JOIN databases d ON d.id = s.database_id`;
 
-router.get('/', can('secrets.use'), (req, res) => {
+router.get('/', can('secrets.use'), async (req, res) => {
   const where = [];
   const params = [];
   for (const key of ['client_id', 'project_id', 'server_id', 'database_id']) {
     if (req.query[key]) where.push(`s.${key} = ?`) && params.push(Number(req.query[key]));
   }
-  res.json(db.all(`${SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY s.label COLLATE NOCASE`, params));
+  res.json(await (db.all(`${SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY s.label COLLATE NOCASE`, params)));
 });
 
-router.post('/', can('secrets.write'), (req, res) => {
+router.post('/', can('secrets.write'), async (req, res) => {
   const data = parse(z.object({ ...fields, value: z.string().min(1, 'Obligatorio').max(20000) }), req.body);
   const { value, ...meta } = data;
-  const id = tx(() => {
-    const newId = insert('secrets', { ...meta, secret_enc: encryptSecret(value), created_by: req.user.id });
-    record(req, { action: 'secret.created', entityType: 'secret', entityId: newId, clientId: meta.client_id, label: meta.label, summary: `Credencial guardada: ${meta.label}` });
+  const id = await (tx(async () => {
+    const newId = await (insert('secrets', { ...meta, secret_enc: encryptSecret(value), created_by: req.user.id }));
+    await (record(req, { action: 'secret.created', entityType: 'secret', entityId: newId, clientId: meta.client_id, label: meta.label, summary: `Credencial guardada: ${meta.label}` }));
     return newId;
-  });
-  res.status(201).json(db.get(`${SELECT} WHERE s.id = ?`, [id]));
+  }));
+  res.status(201).json(await (db.get(`${SELECT} WHERE s.id = ?`, [id])));
 });
 
-router.patch('/:id', can('secrets.write'), (req, res) => {
-  const secret = findOr404('secrets', req.params.id, { message: 'Credencial no encontrada' });
+router.patch('/:id', can('secrets.write'), async (req, res) => {
+  const secret = await (findOr404('secrets', req.params.id, { message: 'Credencial no encontrada' }));
   const data = parse(z.object({ ...fields, value: z.string().min(1).max(20000).optional() }).partial(), req.body);
   const { value, ...meta } = data;
-  tx(() => {
-    update('secrets', secret.id, { ...meta, secret_enc: value ? encryptSecret(value) : undefined });
-    record(req, { action: value ? 'secret.rotated' : 'secret.updated', entityType: 'secret', entityId: secret.id, clientId: secret.client_id, label: secret.label, summary: value ? `Credencial actualizada (nuevo valor): ${secret.label}` : `Credencial editada: ${secret.label}` });
-  });
-  res.json(db.get(`${SELECT} WHERE s.id = ?`, [secret.id]));
+  await (tx(async () => {
+    await (update('secrets', secret.id, { ...meta, secret_enc: value ? encryptSecret(value) : undefined }));
+    await (record(req, { action: value ? 'secret.rotated' : 'secret.updated', entityType: 'secret', entityId: secret.id, clientId: secret.client_id, label: secret.label, summary: value ? `Credencial actualizada (nuevo valor): ${secret.label}` : `Credencial editada: ${secret.label}` }));
+  }));
+  res.json(await (db.get(`${SELECT} WHERE s.id = ?`, [secret.id])));
 });
 
 router.delete('/:id', can('secrets.write'), async (req, res) => {
-  const secret = findOr404('secrets', req.params.id, { message: 'Credencial no encontrada' });
+  const secret = await (findOr404('secrets', req.params.id, { message: 'Credencial no encontrada' }));
   await confirmPassword(req, req.body?.password);
-  tx(() => {
-    db.run('DELETE FROM secrets WHERE id = ?', [secret.id]);
-    record(req, { action: 'secret.deleted', entityType: 'secret', entityId: secret.id, clientId: secret.client_id, label: secret.label, summary: `Credencial eliminada: ${secret.label}` });
-  });
+  await (tx(async () => {
+    await (db.run('DELETE FROM secrets WHERE id = ?', [secret.id]));
+    await (record(req, { action: 'secret.deleted', entityType: 'secret', entityId: secret.id, clientId: secret.client_id, label: secret.label, summary: `Credencial eliminada: ${secret.label}` }));
+  }));
   res.json({ ok: true });
 });
 
 router.post('/:id/use', can('secrets.use'), sensitiveLimiter, async (req, res) => {
-  const secret = findOr404('secrets', req.params.id, { message: 'Credencial no encontrada' });
+  const secret = await (findOr404('secrets', req.params.id, { message: 'Credencial no encontrada' }));
   await confirmPassword(req, req.body?.password);
-  db.run('UPDATE secrets SET last_used_at = ? WHERE id = ?', [nowIso(), secret.id]);
-  record(req, { action: 'secret.used', entityType: 'secret', entityId: secret.id, clientId: secret.client_id, label: secret.label, summary: `Credencial copiada: ${secret.label}` });
+  await (db.run('UPDATE secrets SET last_used_at = ? WHERE id = ?', [nowIso(), secret.id]));
+  await (record(req, { action: 'secret.used', entityType: 'secret', entityId: secret.id, clientId: secret.client_id, label: secret.label, summary: `Credencial copiada: ${secret.label}` }));
   res.setHeader('Cache-Control', 'no-store');
   res.json({ value: decryptSecret(secret.secret_enc) });
 });

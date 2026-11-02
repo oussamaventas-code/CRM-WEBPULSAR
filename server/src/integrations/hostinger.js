@@ -38,7 +38,7 @@ export async function verifyHostinger(token) {
   return capabilities;
 }
 
-const providerId = () => db.value("SELECT id FROM providers WHERE key = 'hostinger'");
+const providerId = async () => await (db.value("SELECT id FROM providers WHERE key = 'hostinger'"));
 
 function mergeMetrics(raw) {
   const data = raw?.data ?? raw ?? {};
@@ -66,14 +66,14 @@ export async function fetchVmMetrics(token, externalId, hours = 3) {
   return mergeMetrics(await call(`/api/vps/v1/virtual-machines/${encodeURIComponent(externalId)}/metrics?${qs}`, token));
 }
 
-export function storeMetrics(serverId, source, rows, totals = {}) {
+export async function storeMetrics(serverId, source, rows, totals = {}) {
   let inserted = 0;
   for (const r of rows) {
-    const res = db.run(
+    const res = await (db.run(
       `INSERT OR IGNORE INTO server_metrics (server_id, source, collected_at, cpu_pct, ram_used_bytes, ram_total_bytes, disk_used_bytes, disk_total_bytes, net_in_bytes, net_out_bytes, load_1, uptime_s)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [serverId, source, r.collected_at, r.cpu_pct ?? null, r.ram_used_bytes ?? null, r.ram_total_bytes ?? totals.ram ?? null, r.disk_used_bytes ?? null, r.disk_total_bytes ?? totals.disk ?? null, r.net_in_bytes ?? null, r.net_out_bytes ?? null, r.load_1 ?? null, r.uptime_s ?? null],
-    );
+    ));
     inserted += Number(res.changes);
   }
   return inserted;
@@ -81,10 +81,10 @@ export function storeMetrics(serverId, source, rows, totals = {}) {
 
 /** Sincroniza VPS, métricas y dominios. Devuelve un informe con lo realizado y las limitaciones encontradas. */
 export async function syncHostinger() {
-  const token = getCredential('hostinger');
+  const token = await (getCredential('hostinger'));
   if (!token) throw new ProviderError(P, 0, 'Hostinger no está configurado');
   const report = { servers: { created: 0, updated: 0 }, metrics: 0, domains: { created: 0, updated: 0 }, subscriptions: [], warnings: [] };
-  const pid = providerId();
+  const pid = await (providerId());
 
   let centers = new Map();
   try {
@@ -119,26 +119,26 @@ export async function syncHostinger() {
       provider_state: vm.state ?? null,
       provisioned_at: vm.created_at ?? null,
     };
-    const existing = db.get('SELECT id FROM servers WHERE provider_id = ? AND external_id = ?', [pid, String(vm.id)]);
-    const id = tx(() => {
+    const existing = await (db.get('SELECT id FROM servers WHERE provider_id = ? AND external_id = ?', [pid, String(vm.id)]));
+    const id = await (tx(async () => {
       if (existing) {
         const keys = Object.keys(fields);
-        db.run(`UPDATE servers SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_at = ? WHERE id = ?`, [...keys.map((k) => fields[k]), nowIso(), existing.id]);
+        await (db.run(`UPDATE servers SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_at = ? WHERE id = ?`, [...keys.map((k) => fields[k]), nowIso(), existing.id]));
         report.servers.updated += 1;
         return existing.id;
       }
-      const res = db.run(
+      const res = await (db.run(
         `INSERT INTO servers (name, provider_id, source, external_id, ${Object.keys(fields).join(', ')}) VALUES (?, ?, 'hostinger', ?, ${Object.keys(fields).map(() => '?').join(', ')})`,
         [vm.hostname || `VPS ${vm.id}`, pid, String(vm.id), ...Object.values(fields)],
-      );
+      ));
       report.servers.created += 1;
       return Number(res.lastInsertRowid);
-    });
+    }));
     syncedServers.push(id);
 
     try {
       const rows = await fetchVmMetrics(token, vm.id);
-      report.metrics += storeMetrics(id, 'hostinger', rows, { ram: vm.memory ? vm.memory * 1024 * 1024 : null, disk: vm.disk ? vm.disk * 1024 * 1024 : null });
+      report.metrics += await (storeMetrics(id, 'hostinger', rows, { ram: vm.memory ? vm.memory * 1024 * 1024 : null, disk: vm.disk ? vm.disk * 1024 * 1024 : null }));
     } catch (err) {
       if (err.status === 401) throw err;
       report.warnings.push(`Métricas de ${vm.hostname || vm.id} no disponibles: ${err.message}`);
@@ -150,12 +150,12 @@ export async function syncHostinger() {
     for (const d of domains) {
       if (!d.domain) continue;
       const expires = d.expires_at ? String(d.expires_at).slice(0, 10) : null;
-      const existing = db.get('SELECT id FROM domains WHERE name = ?', [d.domain]);
+      const existing = await (db.get('SELECT id FROM domains WHERE name = ?', [d.domain]));
       if (existing) {
-        db.run('UPDATE domains SET registrar = ?, hostinger_domain_id = ?, expires_at = COALESCE(?, expires_at), last_synced_at = ?, updated_at = ? WHERE id = ?', ['Hostinger', String(d.id), expires, nowIso(), nowIso(), existing.id]);
+        await (db.run('UPDATE domains SET registrar = ?, hostinger_domain_id = ?, expires_at = COALESCE(?, expires_at), last_synced_at = ?, updated_at = ? WHERE id = ?', ['Hostinger', String(d.id), expires, nowIso(), nowIso(), existing.id]));
         report.domains.updated += 1;
       } else {
-        db.run('INSERT INTO domains (name, registrar, hostinger_domain_id, expires_at, last_synced_at) VALUES (?, ?, ?, ?, ?)', [d.domain, 'Hostinger', String(d.id), expires, nowIso()]);
+        await (db.run('INSERT INTO domains (name, registrar, hostinger_domain_id, expires_at, last_synced_at) VALUES (?, ?, ?, ?, ?)', [d.domain, 'Hostinger', String(d.id), expires, nowIso()]));
         report.domains.created += 1;
       }
     }
@@ -189,7 +189,7 @@ const ACTIONS = { start: 'start', stop: 'stop', restart: 'restart' };
 export async function powerAction(server, action) {
   if (!ACTIONS[action]) throw new ProviderError(P, 400, 'Acción no válida');
   if (server.source !== 'hostinger' || !server.external_id) throw new ProviderError(P, 400, 'El servidor no está vinculado a Hostinger');
-  const token = getCredential('hostinger');
+  const token = await (getCredential('hostinger'));
   if (!token) throw new ProviderError(P, 0, 'Hostinger no está configurado');
   return call(`/api/vps/v1/virtual-machines/${encodeURIComponent(server.external_id)}/${ACTIONS[action]}`, token, { method: 'POST' });
 }

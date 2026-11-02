@@ -61,27 +61,27 @@ export const ROLE_DEFINITIONS = {
 };
 
 /** Sincroniza permisos y roles de sistema con la definición en código (idempotente). */
-export function syncRbac() {
-  tx(() => {
+export async function syncRbac() {
+  await (tx(async () => {
     for (const [key, description] of Object.entries(PERMISSIONS)) {
-      db.run('INSERT INTO permissions (key, description) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET description = excluded.description', [key, description]);
+      await (db.run('INSERT INTO permissions (key, description) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET description = excluded.description', [key, description]));
     }
     for (const [key, role] of Object.entries(ROLE_DEFINITIONS)) {
-      db.run(
+      await (db.run(
         'INSERT INTO roles (key, name, description, is_system) VALUES (?, ?, ?, 1) ON CONFLICT(key) DO UPDATE SET name = excluded.name, description = excluded.description',
         [key, role.name, role.description],
-      );
-      const roleId = db.value('SELECT id FROM roles WHERE key = ?', [key]);
-      db.run('DELETE FROM role_permissions WHERE role_id = ?', [roleId]);
+      ));
+      const roleId = await (db.value('SELECT id FROM roles WHERE key = ?', [key]));
+      await (db.run('DELETE FROM role_permissions WHERE role_id = ?', [roleId]));
       for (const perm of role.permissions) {
-        db.run('INSERT INTO role_permissions (role_id, permission_id) SELECT ?, id FROM permissions WHERE key = ?', [roleId, perm]);
+        await (db.run('INSERT INTO role_permissions (role_id, permission_id) SELECT ?, id FROM permissions WHERE key = ?', [roleId, perm]));
       }
     }
-  });
+  }));
 }
 
-export function permissionsForRole(roleId) {
+export async function permissionsForRole(roleId) {
   return new Set(
-    db.all('SELECT p.key FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id WHERE rp.role_id = ?', [roleId]).map((r) => r.key),
+    await (await (db.all('SELECT p.key FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id WHERE rp.role_id = ?', [roleId]))).map((r) => r.key),
   );
 }

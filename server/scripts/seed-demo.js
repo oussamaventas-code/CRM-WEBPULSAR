@@ -5,12 +5,12 @@ import { db } from '../src/db/index.js';
 import { getSetting } from '../src/lib/settings.js';
 import { loadDemoData } from '../src/seed/demo.js';
 
-migrate({ log: () => {} });
-syncRbac();
-if (getSetting('demo').loaded) {
+await migrate({ log: () => {} });
+await syncRbac();
+if ((await getSetting('demo')).loaded) {
   console.log('• Los datos DEMO ya están cargados.');
   process.exit(0);
 }
-const owner = db.get('SELECT id, name FROM users WHERE is_owner = 1');
-const result = loadDemoData(owner ? { user: owner } : { system: true });
+const owner = await db.get('SELECT id, name FROM users WHERE is_owner = 1');
+const result = await loadDemoData(owner ? { user: owner } : { system: true });
 console.log('✓ Datos DEMO cargados:', result.counts);

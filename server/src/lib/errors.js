@@ -12,9 +12,13 @@ export const forbidden = (message = 'No tienes permiso para realizar esta acció
 export const notFound = (message = 'Recurso no encontrado') => new HttpError(404, message);
 export const conflict = (message, extra) => new HttpError(409, message, extra);
 
-/** Traduce errores de restricciones de SQLite a mensajes comprensibles. */
+/** Traduce errores de restricciones SQLite y PostgreSQL a mensajes comprensibles. */
 export function fromSqliteError(err) {
   const msg = String(err?.message || '');
+  if (err?.code === '23505') return conflict('Ya existe un registro con ese valor');
+  if (err?.code === '23503') return conflict('El registro está relacionado con otros datos o hace referencia a uno inexistente');
+  if (err?.code === '23514' || err?.code === '22P02') return badRequest('Algún valor no es válido para este campo');
+  if (err?.code === 'P0001' && /inmutable|no puede/.test(msg)) return conflict(msg);
   if (/UNIQUE constraint failed: (\w+)\.(\w+)/.test(msg)) {
     const [, , column] = msg.match(/UNIQUE constraint failed: (\w+)\.(\w+)/);
     return conflict('Ya existe un registro con ese valor', { fields: { [column]: 'Ya existe un registro con este valor' } });

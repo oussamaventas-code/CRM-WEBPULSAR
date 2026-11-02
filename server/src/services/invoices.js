@@ -9,48 +9,48 @@ import { parseJson } from '../lib/query.js';
 import { record } from '../lib/audit.js';
 import { recomputeInvoice } from './finance.js';
 
-export function loadInvoice(id) {
-  const inv = db.get(
+export async function loadInvoice(id) {
+  const inv = await (db.get(
     `SELECT i.*, s.code AS series_code, s.name AS series_name, c.name AS client_name, c.company AS client_company, c.email AS client_email,
             p.name AS project_name, r.number AS rectifies_number
      FROM invoices i JOIN invoice_series s ON s.id = i.series_id JOIN clients c ON c.id = i.client_id
      LEFT JOIN projects p ON p.id = i.project_id LEFT JOIN invoices r ON r.id = i.rectifies_invoice_id WHERE i.id = ?`,
     [id],
-  );
+  ));
   if (!inv) throw notFound('Factura no encontrada');
-  inv.items = db.all('SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY position, id', [inv.id]);
+  inv.items = await (db.all('SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY position, id', [inv.id]));
   inv.client_snapshot = parseJson(inv.client_snapshot, null);
   inv.issuer_snapshot = parseJson(inv.issuer_snapshot, null);
   inv.totals = computeInvoice(inv.items, { globalDiscountPct: inv.global_discount_pct, withholdingPct: inv.withholding_pct }).totals;
-  inv.payments = db.all('SELECT id, amount_paid_cents, paid_at, method, external_ref, status FROM payments WHERE invoice_id = ? ORDER BY paid_at', [inv.id]);
-  inv.rectifications = db.all('SELECT id, number, status, total_cents, issue_date FROM invoices WHERE rectifies_invoice_id = ? ORDER BY id', [inv.id]);
+  inv.payments = await (db.all('SELECT id, amount_paid_cents, paid_at, method, external_ref, status FROM payments WHERE invoice_id = ? ORDER BY paid_at', [inv.id]));
+  inv.rectifications = await (db.all('SELECT id, number, status, total_cents, issue_date FROM invoices WHERE rectifies_invoice_id = ? ORDER BY id', [inv.id]));
   return inv;
 }
 
 /** Guarda líneas y totales de un borrador (cálculo siempre en servidor). */
-export function saveDraftItems(invoiceId, items, { globalDiscountPct, withholdingPct }) {
+export async function saveDraftItems(invoiceId, items, { globalDiscountPct, withholdingPct }) {
   const { lines, totals } = computeInvoice(items, { globalDiscountPct, withholdingPct });
-  db.run('DELETE FROM invoice_items WHERE invoice_id = ?', [invoiceId]);
+  await (db.run('DELETE FROM invoice_items WHERE invoice_id = ?', [invoiceId]));
   for (const l of lines) {
-    db.run(
+    await (db.run(
       `INSERT INTO invoice_items (invoice_id, service_id, description, quantity, unit_price_cents, discount_pct, tax_rate, base_cents, discount_cents, tax_cents, total_cents, position)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [invoiceId, l.service_id ?? null, l.description, l.quantity, l.unit_price_cents, l.discount_pct ?? 0, l.tax_rate, l.base_cents, l.discount_cents, l.tax_cents, l.total_cents, l.position],
-    );
+    ));
   }
-  db.run(
+  await (db.run(
     `UPDATE invoices SET subtotal_cents = ?, discount_cents = ?, tax_cents = ?, withholding_cents = ?, total_cents = ?, global_discount_pct = ?, withholding_pct = ?, updated_at = ? WHERE id = ?`,
     [totals.subtotal_cents, totals.discount_cents, totals.tax_cents, totals.withholding_cents, totals.total_cents, globalDiscountPct, withholdingPct, nowIso(), invoiceId],
-  );
+  ));
   return totals;
 }
 
 const ddmmyyyy = (iso) => iso.split('-').reverse().join('-');
 
 /** Datos que exige una factura completa antes de poder emitirse. */
-export function issueBlockers(inv) {
-  const company = getSetting('company');
-  const client = db.get('SELECT * FROM clients WHERE id = ?', [inv.client_id]);
+export async function issueBlockers(inv) {
+  const company = await (getSetting('company'));
+  const client = await (db.get('SELECT * FROM clients WHERE id = ?', [inv.client_id]));
   const problems = [];
   if (!company.legal_name && !company.name) problems.push('Falta la razón social de la empresa (Configuración → Empresa)');
   if (!company.tax_id) problems.push('Falta el NIF/CIF de la empresa (Configuración → Empresa)');
@@ -66,28 +66,28 @@ export function issueBlockers(inv) {
  * genera un registro encadenado (huella SHA-256) con la estructura de VeriFactu.
  * El registro NO se envía a la AEAT: requiere configuración y validación específicas.
  */
-export function issueInvoice(req, invoiceId, { issueDate } = {}) {
-  return tx(() => {
-    const inv = loadInvoice(invoiceId);
+export async function issueInvoice(req, invoiceId, { issueDate } = {}) {
+  return await (tx(async () => {
+    const inv = await (loadInvoice(invoiceId));
     if (inv.status !== 'draft') throw conflict('La factura ya está emitida');
-    const { problems, company, client } = issueBlockers(inv);
+    const { problems, company, client } = await (issueBlockers(inv));
     if (problems.length && !inv.is_demo) throw conflict('No se puede emitir todavía', { problems });
 
     const date = issueDate ?? inv.issue_date ?? today();
     const year = Number(date.slice(0, 4));
-    const series = db.get('SELECT * FROM invoice_series WHERE id = ?', [inv.series_id]);
+    const series = await (db.get('SELECT * FROM invoice_series WHERE id = ?', [inv.series_id]));
     if (!series.active) throw conflict('La serie de facturación está desactivada');
     const counterYear = series.reset_yearly ? year : 0;
 
-    const lastDate = db.value("SELECT MAX(issue_date) FROM invoices WHERE series_id = ? AND status <> 'draft' AND (? = 0 OR year = ?)", [series.id, series.reset_yearly, year]);
+    const lastDate = await (db.value("SELECT MAX(issue_date) FROM invoices WHERE series_id = ? AND status <> 'draft' AND (? = 0 OR year = ?)", [series.id, series.reset_yearly, year]));
     if (lastDate && date < lastDate) throw conflict(`La fecha de emisión no puede ser anterior a la última factura de la serie (${ddmmyyyy(lastDate)})`);
 
-    db.run('INSERT INTO invoice_series_counters (series_id, year, last_number) VALUES (?, ?, 0) ON CONFLICT(series_id, year) DO NOTHING', [series.id, counterYear]);
-    db.run('UPDATE invoice_series_counters SET last_number = last_number + 1 WHERE series_id = ? AND year = ?', [series.id, counterYear]);
-    const sequence = db.value('SELECT last_number FROM invoice_series_counters WHERE series_id = ? AND year = ?', [series.id, counterYear]);
+    await (db.run('INSERT INTO invoice_series_counters (series_id, year, last_number) VALUES (?, ?, 0) ON CONFLICT(series_id, year) DO NOTHING', [series.id, counterYear]));
+    await (db.run('UPDATE invoice_series_counters SET last_number = last_number + 1 WHERE series_id = ? AND year = ?', [series.id, counterYear]));
+    const sequence = await (db.value('SELECT last_number FROM invoice_series_counters WHERE series_id = ? AND year = ?', [series.id, counterYear]));
     const number = formatInvoiceNumber(series, year, sequence);
 
-    const invoicing = getSetting('invoicing');
+    const invoicing = await (getSetting('invoicing'));
     const dueDate = inv.due_date && inv.due_date >= date ? inv.due_date : addDays(date, Number(invoicing.payment_terms_days || 0));
     const issuer = {
       name: company.legal_name || company.name,
@@ -114,7 +114,7 @@ export function issueInvoice(req, invoiceId, { issueDate } = {}) {
       email: client.email,
     };
 
-    const prevHash = db.value("SELECT record_hash FROM invoices WHERE record_hash IS NOT NULL AND status <> 'draft' AND is_demo = 0 ORDER BY issued_at DESC, id DESC LIMIT 1") ?? '';
+    const prevHash = await (db.value("SELECT record_hash FROM invoices WHERE record_hash IS NOT NULL AND status <> 'draft' AND is_demo = 0 ORDER BY issued_at DESC, id DESC LIMIT 1")) ?? '';
     const generatedAt = new Date().toISOString().replace(/\.\d{3}Z$/, '+00:00');
     const payload = [
       `IDEmisorFactura=${issuer.tax_id ?? ''}`,
@@ -127,7 +127,7 @@ export function issueInvoice(req, invoiceId, { issueDate } = {}) {
       `FechaHoraHusoGenRegistro=${generatedAt}`,
     ].join('&');
 
-    db.run(
+    await (db.run(
       `UPDATE invoices SET status = 'issued', number = ?, sequence = ?, year = ?, issue_date = ?, due_date = ?, issued_at = ?,
          client_snapshot = ?, issuer_snapshot = ?, record_payload = ?, record_hash = ?, prev_record_hash = ?, verifactu_status = ?, updated_at = ?
        WHERE id = ?`,
@@ -135,16 +135,16 @@ export function issueInvoice(req, invoiceId, { issueDate } = {}) {
         number, sequence, year, date, dueDate, nowIso(), JSON.stringify(clientSnapshot), JSON.stringify(issuer), inv.is_demo ? null : payload,
         inv.is_demo ? null : sha256(payload).toUpperCase(), inv.is_demo ? null : prevHash || null, invoicing.verifactu_mode === 'not_configured' ? 'not_configured' : 'pending_submission', nowIso(), inv.id,
       ],
-    );
-    recomputeInvoice(inv.id);
+    ));
+    await (recomputeInvoice(inv.id));
 
     if (inv.kind === 'rectifying' && inv.rectifies_invoice_id) {
-      const original = db.get('SELECT * FROM invoices WHERE id = ?', [inv.rectifies_invoice_id]);
-      const rectified = db.value("SELECT COALESCE(SUM(total_cents), 0) FROM invoices WHERE rectifies_invoice_id = ? AND status <> 'draft'", [original.id]);
-      if (original.total_cents + rectified <= 0) db.run("UPDATE invoices SET status = 'cancelled', cancelled_at = ?, updated_at = ? WHERE id = ?", [nowIso(), nowIso(), original.id]);
+      const original = await (db.get('SELECT * FROM invoices WHERE id = ?', [inv.rectifies_invoice_id]));
+      const rectified = await (db.value("SELECT COALESCE(SUM(total_cents), 0) FROM invoices WHERE rectifies_invoice_id = ? AND status <> 'draft'", [original.id]));
+      if (original.total_cents + rectified <= 0) await (db.run("UPDATE invoices SET status = 'cancelled', cancelled_at = ?, updated_at = ? WHERE id = ?", [nowIso(), nowIso(), original.id]));
     }
 
-    record(req, {
+    await (record(req, {
       action: 'invoice.issued',
       entityType: 'invoice',
       entityId: inv.id,
@@ -153,33 +153,33 @@ export function issueInvoice(req, invoiceId, { issueDate } = {}) {
       summary: `Factura emitida ${number} · ${client.company || client.name}`,
       data: { number, total_cents: inv.total_cents },
       isDemo: !!inv.is_demo,
-    });
-    return loadInvoice(inv.id);
-  });
+    }));
+    return await (loadInvoice(inv.id));
+  }));
 }
 
 /** Crea un borrador de factura rectificativa con las líneas en negativo. */
-export function createRectification(req, invoiceId, reason) {
-  return tx(() => {
-    const original = loadInvoice(invoiceId);
+export async function createRectification(req, invoiceId, reason) {
+  return await (tx(async () => {
+    const original = await (loadInvoice(invoiceId));
     if (original.status === 'draft') throw conflict('Un borrador se edita directamente; no necesita rectificativa');
     if (original.kind === 'rectifying') throw conflict('No se puede rectificar una factura rectificativa');
-    const series = db.get("SELECT id FROM invoice_series WHERE kind = 'rectifying' AND active = 1 ORDER BY is_default DESC, id LIMIT 1");
+    const series = await (db.get("SELECT id FROM invoice_series WHERE kind = 'rectifying' AND active = 1 ORDER BY is_default DESC, id LIMIT 1"));
     if (!series) throw conflict('Crea una serie de facturas rectificativas en Configuración → Facturación');
-    const res = db.run(
+    const res = await (db.run(
       `INSERT INTO invoices (series_id, kind, rectifies_invoice_id, rectification_reason, client_id, project_id, currency, global_discount_pct, withholding_pct, notes, is_demo, created_by)
        VALUES (?, 'rectifying', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [series.id, original.id, reason, original.client_id, original.project_id, original.currency, original.global_discount_pct, original.withholding_pct, `Rectifica la factura ${original.number}. Motivo: ${reason}`, original.is_demo, req.user.id],
-    );
+    ));
     const id = Number(res.lastInsertRowid);
-    saveDraftItems(
+    await (saveDraftItems(
       id,
       original.items.map((i) => ({ ...i, quantity: -i.quantity })),
       { globalDiscountPct: original.global_discount_pct, withholdingPct: original.withholding_pct },
-    );
-    record(req, { action: 'invoice.rectification_created', entityType: 'invoice', entityId: id, clientId: original.client_id, label: original.number, summary: `Borrador de rectificativa de ${original.number}` });
-    return loadInvoice(id);
-  });
+    ));
+    await (record(req, { action: 'invoice.rectification_created', entityType: 'invoice', entityId: id, clientId: original.client_id, label: original.number, summary: `Borrador de rectificativa de ${original.number}` }));
+    return await (loadInvoice(id));
+  }));
 }
 
 // ── PDF ──────────────────────────────────────────────────
@@ -188,13 +188,13 @@ const money = (cents, currency = 'EUR') =>
 const dateEs = (iso) => (iso ? new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${iso}T00:00:00Z`)) : '—');
 const qty = (n) => new Intl.NumberFormat('es-ES', { maximumFractionDigits: 3 }).format(n);
 
-export function renderInvoicePdf(inv) {
-  const company = inv.issuer_snapshot ?? (() => {
-    const c = getSetting('company');
+export async function renderInvoicePdf(inv) {
+  const company = inv.issuer_snapshot ?? (async () => {
+    const c = await (getSetting('company'));
     return { name: c.legal_name || c.name, trade_name: c.name, ...c };
   })();
-  const client = inv.client_snapshot ?? db.get('SELECT name AS contact, COALESCE(fiscal_name, company, name) AS name, tax_id, COALESCE(fiscal_address, address) AS address, postal_code, city, province, country, email FROM clients WHERE id = ?', [inv.client_id]);
-  const invoicing = getSetting('invoicing');
+  const client = inv.client_snapshot ?? await (db.get('SELECT name AS contact, COALESCE(fiscal_name, company, name) AS name, tax_id, COALESCE(fiscal_address, address) AS address, postal_code, city, province, country, email FROM clients WHERE id = ?', [inv.client_id]));
+  const invoicing = await (getSetting('invoicing'));
 
   const doc = new PDFDocument({ size: 'A4', margin: 50, info: { Title: inv.number ? `Factura ${inv.number}` : 'Borrador de factura', Author: company.trade_name || company.name } });
   const blue = '#173B72';

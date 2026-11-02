@@ -29,51 +29,51 @@ const SELECT = `SELECT t.*, c.name AS client_name, c.company AS client_company, 
 /** El estado se deriva del contenido salvo autorización/rechazo explícitos. */
 const derivedStatus = (t) => (t.draft_text ? 'pending_approval' : t.internal_notes ? 'pending_draft' : 'received');
 
-router.get('/', can('testimonials.read'), (req, res) => {
+router.get('/', can('testimonials.read'), async (req, res) => {
   const where = [];
   const params = [];
   if (req.query.status) where.push('t.status = ?') && params.push(String(req.query.status));
   if (req.query.client_id) where.push('t.client_id = ?') && params.push(Number(req.query.client_id));
-  res.json(db.all(`${SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY t.received_at DESC, t.id DESC`, params));
+  res.json(await (db.all(`${SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY t.received_at DESC, t.id DESC`, params)));
 });
 
-router.post('/', can('testimonials.write'), (req, res) => {
+router.post('/', can('testimonials.write'), async (req, res) => {
   const data = parse(z.object(baseFields), req.body);
-  if (!db.value('SELECT 1 FROM clients WHERE id = ? AND deleted_at IS NULL', [data.client_id])) throw badRequest('Cliente no válido', { client_id: 'Selecciona un cliente' });
-  const id = tx(() => {
-    const newId = insert('testimonials', { ...data, status: data.draft_text ? 'pending_approval' : 'received', created_by: req.user.id });
-    record(req, { action: 'testimonial.received', entityType: 'testimonial', entityId: newId, clientId: data.client_id, summary: 'Opinión verbal registrada (privada, pendiente de autorización)' });
+  if (!await (db.value('SELECT 1 FROM clients WHERE id = ? AND deleted_at IS NULL', [data.client_id]))) throw badRequest('Cliente no válido', { client_id: 'Selecciona un cliente' });
+  const id = await (tx(async () => {
+    const newId = await (insert('testimonials', { ...data, status: data.draft_text ? 'pending_approval' : 'received', created_by: req.user.id }));
+    await (record(req, { action: 'testimonial.received', entityType: 'testimonial', entityId: newId, clientId: data.client_id, summary: 'Opinión verbal registrada (privada, pendiente de autorización)' }));
     return newId;
-  });
-  res.status(201).json(db.get(`${SELECT} WHERE t.id = ?`, [id]));
+  }));
+  res.status(201).json(await (db.get(`${SELECT} WHERE t.id = ?`, [id])));
 });
 
-router.patch('/:id', can('testimonials.write'), (req, res) => {
-  const before = findOr404('testimonials', req.params.id, { message: 'Testimonio no encontrado' });
+router.patch('/:id', can('testimonials.write'), async (req, res) => {
+  const before = await (findOr404('testimonials', req.params.id, { message: 'Testimonio no encontrado' }));
   const data = parse(z.object(baseFields).partial(), req.body);
   const textChanged = 'draft_text' in data && data.draft_text !== before.draft_text;
   if (before.status === 'authorized' && textChanged) {
     // Cualquier cambio en el texto autorizado invalida la autorización
     data.status = 'pending_approval';
   }
-  tx(() => {
+  await (tx(async () => {
     const merged = { ...before, ...data };
     const status = data.status ?? (['authorized', 'rejected'].includes(before.status) ? before.status : derivedStatus(merged));
     const resetApproval = status !== 'authorized';
-    update('testimonials', before.id, { ...data, status, ...(resetApproval ? { can_publish: 0, approved_at: status === 'rejected' ? before.approved_at : null } : {}) });
-    record(req, {
+    await (update('testimonials', before.id, { ...data, status, ...(resetApproval ? { can_publish: 0, approved_at: status === 'rejected' ? before.approved_at : null } : {}) }));
+    await (record(req, {
       action: before.status === 'authorized' && textChanged ? 'testimonial.authorization_revoked' : 'testimonial.updated',
       entityType: 'testimonial',
       entityId: before.id,
       clientId: before.client_id,
       summary: before.status === 'authorized' && textChanged ? 'Texto de testimonio modificado: requiere nueva autorización' : 'Testimonio actualizado',
-    });
-  });
-  res.json(db.get(`${SELECT} WHERE t.id = ?`, [before.id]));
+    }));
+  }));
+  res.json(await (db.get(`${SELECT} WHERE t.id = ?`, [before.id])));
 });
 
-router.post('/:id/authorize', can('testimonials.approve'), (req, res) => {
-  const t = findOr404('testimonials', req.params.id, { message: 'Testimonio no encontrado' });
+router.post('/:id/authorize', can('testimonials.approve'), async (req, res) => {
+  const t = await (findOr404('testimonials', req.params.id, { message: 'Testimonio no encontrado' }));
   if (!t.draft_text) throw conflict('Redacta primero el texto que el cliente debe aprobar');
   const data = parse(
     z.object({
@@ -85,36 +85,36 @@ router.post('/:id/authorize', can('testimonials.approve'), (req, res) => {
     }),
     req.body,
   );
-  tx(() => {
-    update('testimonials', t.id, { status: 'authorized', approved_at: data.approved_at, approved_by_name: data.approved_by_name, approval_evidence: data.approval_evidence, can_publish: data.can_publish ? 1 : 0 });
-    record(req, {
+  await (tx(async () => {
+    await (update('testimonials', t.id, { status: 'authorized', approved_at: data.approved_at, approved_by_name: data.approved_by_name, approval_evidence: data.approval_evidence, can_publish: data.can_publish ? 1 : 0 }));
+    await (record(req, {
       action: 'testimonial.authorized',
       entityType: 'testimonial',
       entityId: t.id,
       clientId: t.client_id,
       summary: `Testimonio autorizado por ${data.approved_by_name}${data.can_publish ? ' (con permiso de publicación)' : ' (sin permiso de publicación)'}`,
       data: { approved_at: data.approved_at, evidence: data.approval_evidence, text: t.draft_text },
-    });
-  });
-  res.json(db.get(`${SELECT} WHERE t.id = ?`, [t.id]));
+    }));
+  }));
+  res.json(await (db.get(`${SELECT} WHERE t.id = ?`, [t.id])));
 });
 
-router.post('/:id/reject', can('testimonials.approve'), (req, res) => {
-  const t = findOr404('testimonials', req.params.id, { message: 'Testimonio no encontrado' });
+router.post('/:id/reject', can('testimonials.approve'), async (req, res) => {
+  const t = await (findOr404('testimonials', req.params.id, { message: 'Testimonio no encontrado' }));
   const { reason } = parse(z.object({ reason: f.optText(1000) }), req.body);
-  tx(() => {
-    update('testimonials', t.id, { status: 'rejected', can_publish: 0, approval_evidence: reason ?? t.approval_evidence });
-    record(req, { action: 'testimonial.rejected', entityType: 'testimonial', entityId: t.id, clientId: t.client_id, summary: 'Testimonio no autorizado por el cliente' });
-  });
-  res.json(db.get(`${SELECT} WHERE t.id = ?`, [t.id]));
+  await (tx(async () => {
+    await (update('testimonials', t.id, { status: 'rejected', can_publish: 0, approval_evidence: reason ?? t.approval_evidence }));
+    await (record(req, { action: 'testimonial.rejected', entityType: 'testimonial', entityId: t.id, clientId: t.client_id, summary: 'Testimonio no autorizado por el cliente' }));
+  }));
+  res.json(await (db.get(`${SELECT} WHERE t.id = ?`, [t.id])));
 });
 
-router.delete('/:id', can('testimonials.write'), (req, res) => {
-  const t = findOr404('testimonials', req.params.id, { message: 'Testimonio no encontrado' });
-  tx(() => {
-    db.run('DELETE FROM testimonials WHERE id = ?', [t.id]);
-    record(req, { action: 'testimonial.deleted', entityType: 'testimonial', entityId: t.id, clientId: t.client_id, summary: 'Registro de testimonio eliminado', before: t });
-  });
+router.delete('/:id', can('testimonials.write'), async (req, res) => {
+  const t = await (findOr404('testimonials', req.params.id, { message: 'Testimonio no encontrado' }));
+  await (tx(async () => {
+    await (db.run('DELETE FROM testimonials WHERE id = ?', [t.id]));
+    await (record(req, { action: 'testimonial.deleted', entityType: 'testimonial', entityId: t.id, clientId: t.client_id, summary: 'Registro de testimonio eliminado', before: t }));
+  }));
   res.json({ ok: true });
 });
 

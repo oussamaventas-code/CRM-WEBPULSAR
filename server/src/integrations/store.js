@@ -5,8 +5,8 @@ import { parseJson } from '../lib/query.js';
 
 // Acceso a credenciales de integraciones. Las variables de entorno tienen prioridad sobre la base de datos.
 
-export function getIntegration(key) {
-  const row = db.get('SELECT * FROM integrations WHERE provider_key = ?', [key]);
+export async function getIntegration(key) {
+  const row = await (db.get('SELECT * FROM integrations WHERE provider_key = ?', [key]));
   if (!row) return null;
   return { ...row, config: parseJson(row.config, {}), capabilities: parseJson(row.capabilities, {}), last_sync_report: parseJson(row.last_sync_report, null) };
 }
@@ -18,36 +18,36 @@ export function envCredential(key) {
   return null;
 }
 
-export function getCredential(key) {
+export async function getCredential(key) {
   const env = envCredential(key);
   if (env) return env;
-  const row = db.get('SELECT secret_enc FROM integrations WHERE provider_key = ?', [key]);
+  const row = await (db.get('SELECT secret_enc FROM integrations WHERE provider_key = ?', [key]));
   return row?.secret_enc ? decryptSecret(row.secret_enc) : null;
 }
 
-export function hasCredential(key) {
+export async function hasCredential(key) {
   if (envCredential(key)) return true;
-  return !!db.value('SELECT secret_enc IS NOT NULL FROM integrations WHERE provider_key = ?', [key]);
+  return !!await (db.value('SELECT secret_enc IS NOT NULL FROM integrations WHERE provider_key = ?', [key]));
 }
 
-export function saveCredential(key, secret, cfg, userId) {
+export async function saveCredential(key, secret, cfg, userId) {
   const sets = ['config = ?', 'updated_at = ?', "status = 'pending'", 'last_error = NULL'];
   const values = [JSON.stringify(cfg ?? {}), nowIso()];
   if (secret) {
     sets.push('secret_enc = ?', 'secret_hint = ?', 'created_by = COALESCE(created_by, ?)');
     values.push(encryptSecret(secret), secretHint(secret), userId);
   }
-  db.run(`UPDATE integrations SET ${sets.join(', ')} WHERE provider_key = ?`, [...values, key]);
+  await (db.run(`UPDATE integrations SET ${sets.join(', ')} WHERE provider_key = ?`, [...values, key]));
 }
 
-export function clearCredential(key) {
-  db.run(
+export async function clearCredential(key) {
+  await (db.run(
     "UPDATE integrations SET secret_enc = NULL, secret_hint = NULL, status = 'not_configured', capabilities = '{}', last_error = NULL, updated_at = ? WHERE provider_key = ?",
     [nowIso(), key],
-  );
+  ));
 }
 
-export function setIntegrationState(key, { status, capabilities, error, verified, synced, report }) {
+export async function setIntegrationState(key, { status, capabilities, error, verified, synced, report }) {
   const changes = { updated_at: nowIso() };
   if (status) changes.status = status;
   if (capabilities) changes.capabilities = JSON.stringify(capabilities);
@@ -56,7 +56,7 @@ export function setIntegrationState(key, { status, capabilities, error, verified
   if (synced) changes.last_sync_at = nowIso();
   if (report) changes.last_sync_report = JSON.stringify(report);
   const keys = Object.keys(changes);
-  db.run(`UPDATE integrations SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE provider_key = ?`, [...keys.map((k) => changes[k]), key]);
+  await (db.run(`UPDATE integrations SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE provider_key = ?`, [...keys.map((k) => changes[k]), key]));
 }
 
 export class ProviderError extends Error {

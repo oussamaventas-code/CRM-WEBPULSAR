@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
 import { useQuickActions } from '../../layout/QuickActions.jsx';
 import { api, emitRefresh } from '../../lib/api.js';
+import { cancelDirectUpload, uploadFileDirect } from '../../lib/direct-upload.js';
 import { useApi, useDebounced, useLookups } from '../../lib/hooks.js';
 import { bytes, money, todayIso } from '../../lib/format.js';
 import { EXPENSE_CATEGORY, INVOICE_STATUS, PAYMENT_METHOD } from '../../lib/labels.js';
@@ -146,6 +147,19 @@ function ExpensesTab({ formOpen, setFormOpen }) {
         size="lg"
         fields={fields}
         onSubmit={async (v) => {
+          const direct = file ? await uploadFileDirect(file) : null;
+          if (direct) {
+            try {
+              await api.post('/expenses', { ...v, upload: direct });
+            } catch (error) {
+              await cancelDirectUpload(direct.storage_key);
+              throw error;
+            }
+            toast.success('Gasto registrado');
+            setFile(null);
+            emitRefresh();
+            return;
+          }
           const form = new FormData();
           Object.entries(v).forEach(([k, val]) => val != null && form.append(k, val));
           if (file) form.append('file', file);

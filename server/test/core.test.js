@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 
 process.env.DATABASE_PATH = ':memory:';
+process.env.DATABASE_URL = '';
 process.env.MASTER_KEY = crypto.randomBytes(32).toString('base64');
 process.env.SCHEDULER_ENABLED = '0';
 
@@ -16,8 +17,8 @@ const { syncRbac, permissionsForRole } = await import('../src/auth/rbac.js');
 const { db } = await import('../src/db/index.js');
 const { record, verifyAuditChain } = await import('../src/lib/audit.js');
 
-migrate({ log: () => {} });
-syncRbac();
+await migrate({ log: () => {} });
+await syncRbac();
 
 test('cálculo de factura con descuentos, IVA e IRPF', () => {
   const { totals, lines } = computeInvoice(
@@ -87,16 +88,16 @@ test('contraseñas: hash scrypt y política', async () => {
   assert.equal(passwordProblem('Correcta-Clave-2026'), null);
 });
 
-test('permisos por rol', () => {
+test('permisos por rol', async () => {
   const role = (key) => db.value('SELECT id FROM roles WHERE key = ?', [key]);
-  assert.ok(permissionsForRole(role('admin')).has('users.manage'));
-  assert.ok(!permissionsForRole(role('lectura')).has('clients.write'));
-  assert.ok(!permissionsForRole(role('lectura')).has('secrets.use'));
-  assert.ok(permissionsForRole(role('finanzas')).has('invoices.issue'));
-  assert.ok(!permissionsForRole(role('tecnico')).has('finance.read'));
+  assert.ok((await permissionsForRole(role('admin'))).has('users.manage'));
+  assert.ok(!(await permissionsForRole(role('lectura'))).has('clients.write'));
+  assert.ok(!(await permissionsForRole(role('lectura'))).has('secrets.use'));
+  assert.ok((await permissionsForRole(role('finanzas'))).has('invoices.issue'));
+  assert.ok(!(await permissionsForRole(role('tecnico'))).has('finance.read'));
 });
 
-test('factura emitida inmutable y registros de actividad no editables', () => {
+test('factura emitida inmutable y registros de actividad no editables', async () => {
   const client = Number(db.run("INSERT INTO clients (name) VALUES ('Test')").lastInsertRowid);
   const inv = Number(db.run("INSERT INTO invoices (series_id, client_id, status, number, total_cents) VALUES (1, ?, 'issued', 'F2026-0001', 1000)", [client]).lastInsertRowid);
   assert.throws(() => db.run('UPDATE invoices SET total_cents = 5 WHERE id = ?', [inv]), /emitida/);
@@ -104,11 +105,11 @@ test('factura emitida inmutable y registros de actividad no editables', () => {
   db.run("UPDATE invoices SET status = 'paid', paid_cents = 1000 WHERE id = ?", [inv]);
   assert.throws(() => db.run("INSERT INTO invoice_items (invoice_id, description, quantity, unit_price_cents, base_cents, discount_cents, tax_cents, total_cents) VALUES (?, 'x', 1, 1, 1, 0, 0, 1)", [inv]));
 
-  record({ system: true }, { action: 'test', summary: 'uno' });
-  record({ system: true }, { action: 'test', summary: 'dos' });
+  await record({ system: true }, { action: 'test', summary: 'uno' });
+  await record({ system: true }, { action: 'test', summary: 'dos' });
   assert.throws(() => db.run('UPDATE activity_logs SET summary = ?', ['x']), /inmutable/);
   assert.throws(() => db.run('DELETE FROM audit_logs'), /inmutable/);
-  assert.equal(verifyAuditChain().ok, true);
+  assert.equal((await verifyAuditChain()).ok, true);
 });
 
 test('un testimonio no puede ser publicable sin autorización', () => {

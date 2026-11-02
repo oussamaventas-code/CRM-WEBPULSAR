@@ -4,10 +4,12 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import multer from 'multer';
 import { config } from './config.js';
+import { ensureDatabase } from './db/ready.js';
 import { HttpError, fromSqliteError } from './lib/errors.js';
 import { securityHeaders, apiLimiter, agentLimiter } from './middleware/security.js';
 import { authenticate, csrfProtect, requireAuth } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
+import publicRoutes from './routes/public.js';
 import clientRoutes from './routes/clients.js';
 import projectRoutes, { taskRouter } from './routes/projects.js';
 import serviceRoutes, { clientServiceRouter } from './routes/services.js';
@@ -21,17 +23,28 @@ import incidentRoutes from './routes/incidents.js';
 import testimonialRoutes from './routes/testimonials.js';
 import adminRoutes from './routes/admin.js';
 import dashboardRoutes from './routes/dashboard.js';
+import cronRoutes from './routes/cron.js';
 
 export function createApp() {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', config.trustProxy);
   app.use(securityHeaders);
+  if (config.databaseUrl) {
+    app.use(async (_req, _res, next) => {
+      try { await ensureDatabase(); next(); } catch (error) { next(error); }
+    });
+  }
 
   app.get('/healthz', (_req, res) => res.json({ ok: true }));
+  app.get('/api/healthz', (_req, res) => res.json({ ok: true }));
+  app.use('/api/cron', cronRoutes);
 
   // Agente de monitorización: autenticación por token propio, sin cookies.
   app.use('/api/agent', agentLimiter, express.json({ limit: '32kb' }), agentRouter);
+
+  // Formularios de la web pública: sin sesión, CORS solo para PUBLIC_FORM_ORIGINS.
+  app.use('/api/public', publicRoutes);
 
   const api = express.Router();
   api.use(express.json({ limit: '1mb' }), cookieParser(), apiLimiter, authenticate, csrfProtect);

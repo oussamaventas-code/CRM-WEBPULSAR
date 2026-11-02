@@ -7,8 +7,8 @@ import { HttpError, forbidden, unauthorized } from '../lib/errors.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-export function authenticate(req, _res, next) {
-  const loaded = loadSession(req.cookies?.[config.session.cookieName]);
+export async function authenticate(req, _res, next) {
+  const loaded = await (loadSession(req.cookies?.[config.session.cookieName]));
   if (loaded) {
     req.session = loaded.session;
     req.user = loaded.user;
@@ -48,6 +48,6 @@ export function csrfProtect(req, _res, next) {
 /** Re-autenticación para operaciones sensibles (eliminar, revelar credenciales…). */
 export async function confirmPassword(req, password) {
   if (!password) throw new HttpError(400, 'Confirma la operación con tu contraseña', { fields: { password: 'Obligatorio' } });
-  const hash = db.value('SELECT password_hash FROM users WHERE id = ?', [req.user.id]);
+  const hash = await (db.value('SELECT password_hash FROM users WHERE id = ?', [req.user.id]));
   if (!(await verifyPassword(password, hash))) throw new HttpError(403, 'Contraseña incorrecta', { fields: { password: 'Contraseña incorrecta' } });
 }

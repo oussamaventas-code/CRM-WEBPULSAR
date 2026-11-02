@@ -350,10 +350,10 @@ function DataTab({ settings }) {
     <div className="space-y-6">
       <Section
         title="Copias de seguridad"
-        subtitle="Copia diaria automática de la base de datos (VACUUM INTO) con retención configurable"
+        subtitle={data?.provider === 'supabase' ? 'Copias administradas por Supabase para PostgreSQL' : 'Copia diaria automática de la base de datos (VACUUM INTO) con retención configurable'}
         icon={DatabaseBackup}
         flush
-        actions={
+        actions={data?.provider === 'supabase' ? null : (
           <Button
             size="sm"
             icon={Database}
@@ -373,13 +373,17 @@ function DataTab({ settings }) {
           >
             Crear copia ahora
           </Button>
-        }
+        )}
       >
-        <Notice tone="warn" className="mx-5 mb-4">Las credenciales y tokens siguen cifrados dentro de la copia. Para restaurarlos necesitarás la MASTER_KEY: guárdala fuera del servidor. Los archivos subidos (carpeta uploads) deben copiarse aparte; ver docs/RESTAURACION.md.</Notice>
+        {data?.provider === 'supabase' ? (
+          <Notice tone="info" className="mx-5 mb-4">La base de producción usa Supabase PostgreSQL. Revisa y configura las copias y su retención en el panel de Supabase → Database → Backups. Los documentos están en el bucket privado de Supabase Storage.</Notice>
+        ) : (
+          <Notice tone="warn" className="mx-5 mb-4">Las credenciales y tokens siguen cifrados dentro de la copia. Para restaurarlos necesitarás la MASTER_KEY: guárdala fuera del servidor. Los archivos subidos (carpeta uploads) deben copiarse aparte; ver docs/RESTAURACION.md.</Notice>
+        )}
         <DataTable
           rows={data?.backups}
           loading={loading}
-          empty={<EmptyState compact icon={DatabaseBackup} title="Todavía no hay copias" description="La primera copia automática se crea a la hora configurada (BACKUP_HOUR)." />}
+          empty={<EmptyState compact icon={DatabaseBackup} title={data?.provider === 'supabase' ? 'Copias gestionadas en Supabase' : 'Todavía no hay copias'} description={data?.provider === 'supabase' ? 'Abre el panel del proyecto Supabase para consultar las copias y restauraciones.' : 'La primera copia automática se crea a la hora configurada (BACKUP_HOUR).'} />}
           columns={[
             { key: 'name', header: 'Archivo', render: (r) => <span className="mono text-[12.5px]">{r.name}</span> },
             { key: 'size', header: 'Tamaño', align: 'right', render: (r) => <span className="num">{bytes(r.size_bytes)}</span> },

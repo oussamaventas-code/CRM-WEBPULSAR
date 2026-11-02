@@ -43,94 +43,94 @@ const ENTITY_NAME_SQL = `CASE c.entity_type
   WHEN 'database' THEN (SELECT name FROM databases WHERE id = c.entity_id)
   WHEN 'application' THEN (SELECT name FROM applications WHERE id = c.entity_id) END`;
 
-router.get('/checks', can('monitoring.read'), (req, res) => {
+router.get('/checks', can('monitoring.read'), async (req, res) => {
   const where = [];
   const params = [];
   if (req.query.entity_type) where.push('c.entity_type = ?') && params.push(String(req.query.entity_type));
   if (req.query.entity_id) where.push('c.entity_id = ?') && params.push(Number(req.query.entity_id));
-  const rows = db.all(`SELECT c.*, ${ENTITY_NAME_SQL} AS entity_name FROM monitoring_checks c ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY CASE c.last_status WHEN 'down' THEN 0 WHEN 'degraded' THEN 1 WHEN 'unknown' THEN 2 ELSE 3 END, c.name`, params);
-  res.json(rows.map((c) => ({ ...c, uptime_24h: uptime(c.id, 24), uptime_7d: uptime(c.id, 168), uptime_30d: uptime(c.id, 720), bars: uptimeBars(c.id, 48) })));
+  const rows = await (db.all(`SELECT c.*, ${ENTITY_NAME_SQL} AS entity_name FROM monitoring_checks c ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY CASE c.last_status WHEN 'down' THEN 0 WHEN 'degraded' THEN 1 WHEN 'unknown' THEN 2 ELSE 3 END, c.name`, params));
+  res.json(await Promise.all(rows.map(async (c) => ({ ...c, uptime_24h: await uptime(c.id, 24), uptime_7d: await uptime(c.id, 168), uptime_30d: await uptime(c.id, 720), bars: await uptimeBars(c.id, 48) }))));
 });
 
-router.get('/checks/:id/results', can('monitoring.read'), (req, res) => {
-  const check = findOr404('monitoring_checks', req.params.id, { message: 'Comprobación no encontrada' });
+router.get('/checks/:id/results', can('monitoring.read'), async (req, res) => {
+  const check = await (findOr404('monitoring_checks', req.params.id, { message: 'Comprobación no encontrada' }));
   const hours = { '24h': 24, '7d': 168, '30d': 720 }[req.query.range] ?? 24;
-  res.json(db.all('SELECT status, latency_ms, status_code, message, checked_at FROM monitoring_results WHERE check_id = ? AND checked_at >= ? ORDER BY checked_at', [check.id, new Date(Date.now() - hours * 3600_000).toISOString()]));
+  res.json(await (db.all('SELECT status, latency_ms, status_code, message, checked_at FROM monitoring_results WHERE check_id = ? AND checked_at >= ? ORDER BY checked_at', [check.id, new Date(Date.now() - hours * 3600_000).toISOString()])));
 });
 
 router.post('/checks', can('monitoring.write'), async (req, res) => {
   const data = parse(checkSchema, req.body);
-  const m = getSetting('monitoring');
-  const id = tx(() => {
-    const newId = insert('monitoring_checks', { ...data, interval_s: data.interval_s ?? m.default_interval_s, failure_threshold: data.failure_threshold ?? m.failure_threshold, created_by: req.user.id });
-    record(req, { action: 'check.created', entityType: 'check', entityId: newId, label: data.name, summary: `Comprobación creada: ${data.name}` });
+  const m = await (getSetting('monitoring'));
+  const id = await (tx(async () => {
+    const newId = await (insert('monitoring_checks', { ...data, interval_s: data.interval_s ?? m.default_interval_s, failure_threshold: data.failure_threshold ?? m.failure_threshold, created_by: req.user.id }));
+    await (record(req, { action: 'check.created', entityType: 'check', entityId: newId, label: data.name, summary: `Comprobación creada: ${data.name}` }));
     return newId;
-  });
-  const check = db.get('SELECT * FROM monitoring_checks WHERE id = ?', [id]);
+  }));
+  const check = await (db.get('SELECT * FROM monitoring_checks WHERE id = ?', [id]));
   if (check.enabled) await executeCheck(check, req);
-  res.status(201).json(db.get('SELECT * FROM monitoring_checks WHERE id = ?', [id]));
+  res.status(201).json(await (db.get('SELECT * FROM monitoring_checks WHERE id = ?', [id])));
 });
 
-router.patch('/checks/:id', can('monitoring.write'), (req, res) => {
-  const before = findOr404('monitoring_checks', req.params.id, { message: 'Comprobación no encontrada' });
+router.patch('/checks/:id', can('monitoring.write'), async (req, res) => {
+  const before = await (findOr404('monitoring_checks', req.params.id, { message: 'Comprobación no encontrada' }));
   const data = parse(checkSchema.innerType().partial(), req.body);
-  tx(() => {
-    update('monitoring_checks', before.id, data);
-    record(req, { action: 'check.updated', entityType: 'check', entityId: before.id, label: before.name, summary: `Comprobación actualizada: ${before.name}`, before, after: data });
-  });
-  if (before.entity_type) evaluateEntity(before.entity_type, before.entity_id);
-  res.json(db.get('SELECT * FROM monitoring_checks WHERE id = ?', [before.id]));
+  await (tx(async () => {
+    await (update('monitoring_checks', before.id, data));
+    await (record(req, { action: 'check.updated', entityType: 'check', entityId: before.id, label: before.name, summary: `Comprobación actualizada: ${before.name}`, before, after: data }));
+  }));
+  if (before.entity_type) await (evaluateEntity(before.entity_type, before.entity_id));
+  res.json(await (db.get('SELECT * FROM monitoring_checks WHERE id = ?', [before.id])));
 });
 
-router.delete('/checks/:id', can('monitoring.write'), (req, res) => {
-  const check = findOr404('monitoring_checks', req.params.id, { message: 'Comprobación no encontrada' });
-  tx(() => {
-    db.run("UPDATE monitoring_alerts SET status = 'resolved', resolved_at = ? WHERE check_id = ? AND status <> 'resolved'", [nowIso(), check.id]);
-    db.run('DELETE FROM monitoring_checks WHERE id = ?', [check.id]);
-    record(req, { action: 'check.deleted', entityType: 'check', entityId: check.id, label: check.name, summary: `Comprobación eliminada: ${check.name}` });
-  });
-  if (check.entity_type) evaluateEntity(check.entity_type, check.entity_id);
+router.delete('/checks/:id', can('monitoring.write'), async (req, res) => {
+  const check = await (findOr404('monitoring_checks', req.params.id, { message: 'Comprobación no encontrada' }));
+  await (tx(async () => {
+    await (db.run("UPDATE monitoring_alerts SET status = 'resolved', resolved_at = ? WHERE check_id = ? AND status <> 'resolved'", [nowIso(), check.id]));
+    await (db.run('DELETE FROM monitoring_checks WHERE id = ?', [check.id]));
+    await (record(req, { action: 'check.deleted', entityType: 'check', entityId: check.id, label: check.name, summary: `Comprobación eliminada: ${check.name}` }));
+  }));
+  if (check.entity_type) await (evaluateEntity(check.entity_type, check.entity_id));
   res.json({ ok: true });
 });
 
 router.post('/checks/:id/run', can('monitoring.write'), async (req, res) => {
-  const check = findOr404('monitoring_checks', req.params.id, { message: 'Comprobación no encontrada' });
+  const check = await (findOr404('monitoring_checks', req.params.id, { message: 'Comprobación no encontrada' }));
   const result = await executeCheck(check, req);
-  res.json({ result, check: db.get('SELECT * FROM monitoring_checks WHERE id = ?', [check.id]) });
+  res.json({ result, check: await (db.get('SELECT * FROM monitoring_checks WHERE id = ?', [check.id])) });
 });
 
 // ── Alertas ──────────────────────────────────────────────
-router.get('/alerts', can('monitoring.read'), (req, res) => {
+router.get('/alerts', can('monitoring.read'), async (req, res) => {
   const status = req.query.status === 'resolved' ? "a.status = 'resolved'" : req.query.status === 'all' ? '1 = 1' : "a.status <> 'resolved'";
   res.json(
-    db.all(
+    await (db.all(
       `SELECT a.*, u.name AS acknowledged_by_name, i.title AS incident_title, i.status AS incident_status FROM monitoring_alerts a
        LEFT JOIN users u ON u.id = a.acknowledged_by LEFT JOIN incidents i ON i.id = a.incident_id
        WHERE ${status} ORDER BY a.status = 'resolved', a.severity = 'critical' DESC, a.last_seen_at DESC LIMIT 200`,
-    ),
+    )),
   );
 });
 
-router.post('/alerts/:id/ack', can('monitoring.write'), (req, res) => {
-  const alert = findOr404('monitoring_alerts', req.params.id, { message: 'Alerta no encontrada' });
+router.post('/alerts/:id/ack', can('monitoring.write'), async (req, res) => {
+  const alert = await (findOr404('monitoring_alerts', req.params.id, { message: 'Alerta no encontrada' }));
   if (alert.status !== 'open') throw conflict('La alerta no está abierta');
-  db.run("UPDATE monitoring_alerts SET status = 'acknowledged', acknowledged_at = ?, acknowledged_by = ? WHERE id = ?", [nowIso(), req.user.id, alert.id]);
-  record(req, { action: 'alert.acknowledged', entityType: 'alert', entityId: alert.id, label: alert.title, summary: `Alerta reconocida: ${alert.title}` });
-  res.json(db.get('SELECT * FROM monitoring_alerts WHERE id = ?', [alert.id]));
+  await (db.run("UPDATE monitoring_alerts SET status = 'acknowledged', acknowledged_at = ?, acknowledged_by = ? WHERE id = ?", [nowIso(), req.user.id, alert.id]));
+  await (record(req, { action: 'alert.acknowledged', entityType: 'alert', entityId: alert.id, label: alert.title, summary: `Alerta reconocida: ${alert.title}` }));
+  res.json(await (db.get('SELECT * FROM monitoring_alerts WHERE id = ?', [alert.id])));
 });
 
-router.post('/alerts/:id/resolve', can('monitoring.write'), (req, res) => {
-  const alert = findOr404('monitoring_alerts', req.params.id, { message: 'Alerta no encontrada' });
+router.post('/alerts/:id/resolve', can('monitoring.write'), async (req, res) => {
+  const alert = await (findOr404('monitoring_alerts', req.params.id, { message: 'Alerta no encontrada' }));
   if (alert.status === 'resolved') throw conflict('La alerta ya está resuelta');
-  db.run("UPDATE monitoring_alerts SET status = 'resolved', resolved_at = ? WHERE id = ?", [nowIso(), alert.id]);
-  record(req, { action: 'alert.resolved', entityType: 'alert', entityId: alert.id, label: alert.title, summary: `Alerta cerrada manualmente: ${alert.title}` });
-  res.json(db.get('SELECT * FROM monitoring_alerts WHERE id = ?', [alert.id]));
+  await (db.run("UPDATE monitoring_alerts SET status = 'resolved', resolved_at = ? WHERE id = ?", [nowIso(), alert.id]));
+  await (record(req, { action: 'alert.resolved', entityType: 'alert', entityId: alert.id, label: alert.title, summary: `Alerta cerrada manualmente: ${alert.title}` }));
+  res.json(await (db.get('SELECT * FROM monitoring_alerts WHERE id = ?', [alert.id])));
 });
 
-router.post('/alerts/:id/incident', can('incidents.write'), (req, res) => {
-  const alert = findOr404('monitoring_alerts', req.params.id, { message: 'Alerta no encontrada' });
+router.post('/alerts/:id/incident', can('incidents.write'), async (req, res) => {
+  const alert = await (findOr404('monitoring_alerts', req.params.id, { message: 'Alerta no encontrada' }));
   if (alert.incident_id) throw badRequest('La alerta ya tiene una incidencia');
-  const incidentId = tx(() => createIncidentFromAlert(req, alert.id, { userId: req.user.id }));
+  const incidentId = await (tx(async () => await (createIncidentFromAlert(req, alert.id, { userId: req.user.id }))));
   res.status(201).json({ incident_id: incidentId });
 });
 

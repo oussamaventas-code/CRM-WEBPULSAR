@@ -13,26 +13,27 @@ import { financeSeries, financeTotals, recomputeInvoice } from '../services/fina
 import { createRectification, issueBlockers, issueInvoice, loadInvoice, renderInvoicePdf, saveDraftItems } from '../services/invoices.js';
 import { generateRecurring } from '../services/automations.js';
 import { sendMail } from '../services/mailer.js';
-import { storeUpload, upload } from './documents.js';
+import { completeSupabaseUpload, storeUpload, upload } from './documents.js';
+import { removeObject } from '../storage/supabase.js';
 
 const router = Router();
 const METHODS = ['transfer', 'card', 'stripe', 'paypal', 'cash', 'other'];
 const money = (c) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(c / 100);
 
-function clientLabel(id) {
-  const c = db.get('SELECT name, company FROM clients WHERE id = ?', [id]);
+async function clientLabel(id) {
+  const c = await (db.get('SELECT name, company FROM clients WHERE id = ?', [id]));
   return c ? c.company || c.name : 'cliente';
 }
 
-function assertClient(id) {
-  if (!db.value('SELECT 1 FROM clients WHERE id = ? AND deleted_at IS NULL', [id])) throw badRequest('Cliente no válido', { client_id: 'Selecciona un cliente' });
+async function assertClient(id) {
+  if (!await (db.value('SELECT 1 FROM clients WHERE id = ? AND deleted_at IS NULL', [id]))) throw badRequest('Cliente no válido', { client_id: 'Selecciona un cliente' });
 }
 
 // ── Resumen ──────────────────────────────────────────────
-router.get('/finance/summary', can('finance.read'), (_req, res) => {
+router.get('/finance/summary', can('finance.read'), async (_req, res) => {
   res.json({
-    totals: financeTotals(),
-    upcoming: db.all(
+    totals: await (financeTotals()),
+    upcoming: await (db.all(
       `SELECT * FROM (SELECT 'invoice' AS kind, i.id, i.number AS label, i.client_id, c.name AS client_name, i.due_date, i.total_cents - i.paid_cents AS amount_cents, i.status
        FROM invoices i JOIN clients c ON c.id = i.client_id WHERE i.status IN ('issued', 'partially_paid', 'overdue')
        UNION ALL
@@ -43,13 +44,13 @@ router.get('/finance/summary', can('finance.read'), (_req, res) => {
        FROM recurring_payments r JOIN clients c ON c.id = r.client_id WHERE r.status = 'active' AND r.next_due_date <= ?)
        ORDER BY due_date IS NULL, due_date LIMIT 12`,
       [addDays(today(), 45)],
-    ),
-    expenses_by_category: db.all("SELECT category, SUM(amount_cents) AS amount_cents FROM expenses WHERE date >= ? GROUP BY category ORDER BY 2 DESC", [`${today().slice(0, 4)}-01-01`]),
+    )),
+    expenses_by_category: await (db.all("SELECT category, SUM(amount_cents) AS amount_cents FROM expenses WHERE date >= ? GROUP BY category ORDER BY 2 DESC", [`${today().slice(0, 4)}-01-01`])),
   });
 });
 
-router.get('/finance/series', can('finance.read'), (req, res) => {
-  res.json(financeSeries(['7d', '30d', '90d', '12m'].includes(req.query.range) ? req.query.range : '30d'));
+router.get('/finance/series', can('finance.read'), async (req, res) => {
+  res.json(await (financeSeries(['7d', '30d', '90d', '12m'].includes(req.query.range) ? req.query.range : '30d')));
 });
 
 // ── Series de facturación ────────────────────────────────
@@ -65,40 +66,40 @@ const seriesSchema = z.object({
   active: f.bool().default(true),
 });
 
-router.get('/invoice-series', can('finance.read'), (_req, res) => {
+router.get('/invoice-series', can('finance.read'), async (_req, res) => {
   res.json(
-    db.all(
+    await (db.all(
       `SELECT s.*, (SELECT COUNT(*) FROM invoices i WHERE i.series_id = s.id AND i.status <> 'draft') AS issued_count,
               (SELECT last_number FROM invoice_series_counters k WHERE k.series_id = s.id ORDER BY year DESC LIMIT 1) AS last_number
        FROM invoice_series s ORDER BY s.kind, s.code`,
-    ),
+    )),
   );
 });
 
-router.post('/invoice-series', can('settings.manage'), (req, res) => {
+router.post('/invoice-series', can('settings.manage'), async (req, res) => {
   const data = parse(seriesSchema, req.body);
-  const id = tx(() => {
-    if (data.is_default) db.run('UPDATE invoice_series SET is_default = 0 WHERE kind = ?', [data.kind]);
-    const newId = insert('invoice_series', { ...data, code: data.code.toUpperCase() });
-    record(req, { action: 'invoice_series.created', entityType: 'invoice_series', entityId: newId, label: data.code, summary: `Serie de facturación creada: ${data.code}` });
+  const id = await (tx(async () => {
+    if (data.is_default) await (db.run('UPDATE invoice_series SET is_default = 0 WHERE kind = ?', [data.kind]));
+    const newId = await (insert('invoice_series', { ...data, code: data.code.toUpperCase() }));
+    await (record(req, { action: 'invoice_series.created', entityType: 'invoice_series', entityId: newId, label: data.code, summary: `Serie de facturación creada: ${data.code}` }));
     return newId;
-  });
-  res.status(201).json(db.get('SELECT * FROM invoice_series WHERE id = ?', [id]));
+  }));
+  res.status(201).json(await (db.get('SELECT * FROM invoice_series WHERE id = ?', [id])));
 });
 
-router.patch('/invoice-series/:id', can('settings.manage'), (req, res) => {
-  const series = findOr404('invoice_series', req.params.id, { message: 'Serie no encontrada' });
+router.patch('/invoice-series/:id', can('settings.manage'), async (req, res) => {
+  const series = await (findOr404('invoice_series', req.params.id, { message: 'Serie no encontrada' }));
   const data = parse(seriesSchema.partial(), req.body);
-  const issued = db.value("SELECT COUNT(*) FROM invoices WHERE series_id = ? AND status <> 'draft'", [series.id]);
+  const issued = await (db.value("SELECT COUNT(*) FROM invoices WHERE series_id = ? AND status <> 'draft'", [series.id]));
   if (issued && ['code', 'prefix', 'format', 'padding', 'reset_yearly', 'kind'].some((k) => k in data && data[k] !== series[k] && !(typeof data[k] === 'boolean' && Number(data[k]) === series[k]))) {
     throw conflict('La serie ya tiene facturas emitidas: solo puedes cambiar el nombre, activarla o marcarla por defecto');
   }
-  tx(() => {
-    if (data.is_default) db.run('UPDATE invoice_series SET is_default = 0 WHERE kind = ?', [data.kind ?? series.kind]);
-    update('invoice_series', series.id, data);
-    record(req, { action: 'invoice_series.updated', entityType: 'invoice_series', entityId: series.id, label: series.code, summary: `Serie de facturación actualizada: ${series.code}`, before: series, after: data });
-  });
-  res.json(db.get('SELECT * FROM invoice_series WHERE id = ?', [series.id]));
+  await (tx(async () => {
+    if (data.is_default) await (db.run('UPDATE invoice_series SET is_default = 0 WHERE kind = ?', [data.kind ?? series.kind]));
+    await (update('invoice_series', series.id, data));
+    await (record(req, { action: 'invoice_series.updated', entityType: 'invoice_series', entityId: series.id, label: series.code, summary: `Serie de facturación actualizada: ${series.code}`, before: series, after: data }));
+  }));
+  res.json(await (db.get('SELECT * FROM invoice_series WHERE id = ?', [series.id])));
 });
 
 // ── Facturas ─────────────────────────────────────────────
@@ -127,7 +128,7 @@ const invoiceSchema = z.object({
 const INVOICE_LIST_FROM = `(SELECT i.*, c.name AS client_name, c.company AS client_company, s.code AS series_code, p.name AS project_name
   FROM invoices i JOIN clients c ON c.id = i.client_id JOIN invoice_series s ON s.id = i.series_id LEFT JOIN projects p ON p.id = i.project_id) x`;
 
-router.get('/invoices', can('finance.read'), (req, res) => {
+router.get('/invoices', can('finance.read'), async (req, res) => {
   const where = [];
   const params = [];
   const statuses = String(req.query.status ?? '').split(',').filter(Boolean);
@@ -138,7 +139,7 @@ router.get('/invoices', can('finance.read'), (req, res) => {
   if (req.query.from) where.push('x.issue_date >= ?') && params.push(String(req.query.from));
   if (req.query.to) where.push('x.issue_date <= ?') && params.push(String(req.query.to));
   res.json(
-    paginate(req.query, {
+    await (paginate(req.query, {
       from: INVOICE_LIST_FROM,
       where,
       params,
@@ -146,51 +147,51 @@ router.get('/invoices', can('finance.read'), (req, res) => {
       sortMap: { number: 'x.year DESC, x.sequence', issue_date: 'x.issue_date', due_date: 'x.due_date', total: 'x.total_cents', client: 'x.client_name COLLATE NOCASE', status: 'x.status', created_at: 'x.created_at' },
       defaultSort: ['created_at', 'desc'],
       tiebreak: 'x.id DESC',
-    }),
+    })),
   );
 });
 
-router.get('/invoices/:id', can('finance.read'), (req, res) => {
-  const inv = loadInvoice(req.params.id);
-  res.json({ ...inv, blockers: inv.status === 'draft' ? issueBlockers(inv).problems : [] });
+router.get('/invoices/:id', can('finance.read'), async (req, res) => {
+  const inv = await (loadInvoice(req.params.id));
+  res.json({ ...inv, blockers: inv.status === 'draft' ? await (issueBlockers(inv)).problems : [] });
 });
 
-function defaultSeries(kind = 'standard') {
-  const s = db.get('SELECT id FROM invoice_series WHERE kind = ? AND active = 1 ORDER BY is_default DESC, id LIMIT 1', [kind]);
+async function defaultSeries(kind = 'standard') {
+  const s = await (db.get('SELECT id FROM invoice_series WHERE kind = ? AND active = 1 ORDER BY is_default DESC, id LIMIT 1', [kind]));
   if (!s) throw conflict('No hay ninguna serie de facturación activa');
   return s.id;
 }
 
-router.post('/invoices', can('finance.write'), (req, res) => {
+router.post('/invoices', can('finance.write'), async (req, res) => {
   const data = parse(invoiceSchema, req.body);
-  assertClient(data.client_id);
-  const id = tx(() => {
-    const newId = insert('invoices', {
-      series_id: data.series_id ?? defaultSeries(),
+  await (assertClient(data.client_id));
+  const id = await (tx(async () => {
+    const newId = await (insert('invoices', {
+      series_id: data.series_id ?? await (defaultSeries()),
       client_id: data.client_id,
       project_id: data.project_id,
       issue_date: data.issue_date,
       due_date: data.due_date,
-      currency: getSetting('invoicing').currency,
+      currency: await (await (getSetting('invoicing'))).currency,
       notes: data.notes,
       footer: data.footer,
       created_by: req.user.id,
-    });
-    saveDraftItems(newId, data.items, { globalDiscountPct: data.global_discount_pct, withholdingPct: data.withholding_pct });
-    record(req, { action: 'invoice.draft_created', entityType: 'invoice', entityId: newId, clientId: data.client_id, label: 'Borrador', summary: `Borrador de factura para ${clientLabel(data.client_id)}` });
+    }));
+    await (saveDraftItems(newId, data.items, { globalDiscountPct: data.global_discount_pct, withholdingPct: data.withholding_pct }));
+    await (record(req, { action: 'invoice.draft_created', entityType: 'invoice', entityId: newId, clientId: data.client_id, label: 'Borrador', summary: `Borrador de factura para ${await (clientLabel(data.client_id))}` }));
     return newId;
-  });
-  res.status(201).json(loadInvoice(id));
+  }));
+  res.status(201).json(await (loadInvoice(id)));
 });
 
-router.put('/invoices/:id', can('finance.write'), (req, res) => {
-  const inv = loadInvoice(req.params.id);
+router.put('/invoices/:id', can('finance.write'), async (req, res) => {
+  const inv = await (loadInvoice(req.params.id));
   if (inv.status !== 'draft') throw conflict('Solo se pueden editar borradores. Para corregir una factura emitida, crea una rectificativa.');
   const data = parse(invoiceSchema, req.body);
-  assertClient(data.client_id);
+  await (assertClient(data.client_id));
   if (inv.kind === 'rectifying' && data.client_id !== inv.client_id) throw conflict('Una rectificativa debe mantener el cliente de la factura original');
-  tx(() => {
-    update('invoices', inv.id, {
+  await (tx(async () => {
+    await (update('invoices', inv.id, {
       series_id: data.series_id ?? inv.series_id,
       client_id: data.client_id,
       project_id: data.project_id,
@@ -198,60 +199,60 @@ router.put('/invoices/:id', can('finance.write'), (req, res) => {
       due_date: data.due_date,
       notes: data.notes,
       footer: data.footer,
-    });
-    saveDraftItems(inv.id, data.items, { globalDiscountPct: data.global_discount_pct, withholdingPct: data.withholding_pct });
-    record(req, { action: 'invoice.draft_updated', entityType: 'invoice', entityId: inv.id, clientId: data.client_id, label: 'Borrador', summary: `Borrador de factura actualizado (${clientLabel(data.client_id)})` });
-  });
-  res.json(loadInvoice(inv.id));
+    }));
+    await (saveDraftItems(inv.id, data.items, { globalDiscountPct: data.global_discount_pct, withholdingPct: data.withholding_pct }));
+    await (record(req, { action: 'invoice.draft_updated', entityType: 'invoice', entityId: inv.id, clientId: data.client_id, label: 'Borrador', summary: `Borrador de factura actualizado (${await (clientLabel(data.client_id))})` }));
+  }));
+  res.json(await (loadInvoice(inv.id)));
 });
 
-router.delete('/invoices/:id', can('finance.write'), (req, res) => {
-  const inv = loadInvoice(req.params.id);
+router.delete('/invoices/:id', can('finance.write'), async (req, res) => {
+  const inv = await (loadInvoice(req.params.id));
   if (inv.status !== 'draft') throw conflict('Las facturas emitidas no se eliminan. Emite una rectificativa.');
-  tx(() => {
-    db.run('DELETE FROM invoices WHERE id = ?', [inv.id]);
-    record(req, { action: 'invoice.draft_deleted', entityType: 'invoice', entityId: inv.id, clientId: inv.client_id, label: 'Borrador', summary: `Borrador de factura eliminado (${clientLabel(inv.client_id)})` });
-  });
+  await (tx(async () => {
+    await (db.run('DELETE FROM invoices WHERE id = ?', [inv.id]));
+    await (record(req, { action: 'invoice.draft_deleted', entityType: 'invoice', entityId: inv.id, clientId: inv.client_id, label: 'Borrador', summary: `Borrador de factura eliminado (${await (clientLabel(inv.client_id))})` }));
+  }));
   res.json({ ok: true });
 });
 
-router.post('/invoices/:id/issue', can('invoices.issue'), (req, res) => {
+router.post('/invoices/:id/issue', can('invoices.issue'), async (req, res) => {
   const { issue_date } = parse(z.object({ issue_date: f.optDate() }), req.body);
-  res.json(issueInvoice(req, Number(req.params.id), { issueDate: issue_date ?? undefined }));
+  res.json(await (issueInvoice(req, Number(req.params.id), { issueDate: issue_date ?? undefined })));
 });
 
-router.post('/invoices/:id/rectify', can('invoices.issue'), (req, res) => {
+router.post('/invoices/:id/rectify', can('invoices.issue'), async (req, res) => {
   const { reason } = parse(z.object({ reason: f.text(500) }), req.body);
-  res.status(201).json(createRectification(req, Number(req.params.id), reason));
+  res.status(201).json(await (createRectification(req, Number(req.params.id), reason)));
 });
 
-router.get('/invoices/:id/pdf', can('finance.read'), (req, res) => {
-  const inv = loadInvoice(req.params.id);
+router.get('/invoices/:id/pdf', can('finance.read'), async (req, res) => {
+  const inv = await (loadInvoice(req.params.id));
   const name = inv.number ? `Factura-${inv.number}.pdf` : `Borrador-factura-${inv.id}.pdf`;
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `${req.query.download ? 'attachment' : 'inline'}; filename="${name}"`);
   res.setHeader('Cache-Control', 'private, no-store');
-  renderInvoicePdf(inv).pipe(res);
+  await (renderInvoicePdf(inv)).pipe(res);
 });
 
 const pdfBuffer = (inv) =>
-  new Promise((resolve, reject) => {
+  new Promise(async (resolve, reject) => {
     const chunks = [];
-    const doc = renderInvoicePdf(inv);
+    const doc = await (renderInvoicePdf(inv));
     doc.on('data', (c) => chunks.push(c));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
   });
 
 router.post('/invoices/:id/send', can('invoices.issue'), async (req, res) => {
-  const inv = loadInvoice(req.params.id);
+  const inv = await (loadInvoice(req.params.id));
   if (inv.status === 'draft') throw conflict('Emite la factura antes de enviarla');
   const data = parse(z.object({ to: f.email(), subject: f.text(200), message: f.text(5000) }), req.body);
   const pdf = await pdfBuffer(inv);
   await sendMail({ to: data.to, subject: data.subject, text: data.message, attachments: [{ filename: `Factura-${inv.number}.pdf`, content: pdf, contentType: 'application/pdf' }] });
-  db.run('UPDATE invoices SET sent_at = ?, updated_at = ? WHERE id = ?', [nowIso(), nowIso(), inv.id]);
-  record(req, { action: 'invoice.sent', entityType: 'invoice', entityId: inv.id, clientId: inv.client_id, label: inv.number, summary: `Factura ${inv.number} enviada a ${data.to}` });
-  res.json(loadInvoice(inv.id));
+  await (db.run('UPDATE invoices SET sent_at = ?, updated_at = ? WHERE id = ?', [nowIso(), nowIso(), inv.id]));
+  await (record(req, { action: 'invoice.sent', entityType: 'invoice', entityId: inv.id, clientId: inv.client_id, label: inv.number, summary: `Factura ${inv.number} enviada a ${data.to}` }));
+  res.json(await (loadInvoice(inv.id)));
 });
 
 const collectSchema = z.object({
@@ -262,14 +263,14 @@ const collectSchema = z.object({
   notes: f.optText(1000),
 });
 
-router.post('/invoices/:id/payments', can('finance.write'), (req, res) => {
-  const inv = loadInvoice(req.params.id);
+router.post('/invoices/:id/payments', can('finance.write'), async (req, res) => {
+  const inv = await (loadInvoice(req.params.id));
   if (!['issued', 'partially_paid', 'overdue'].includes(inv.status)) throw conflict('Solo se registran cobros en facturas emitidas pendientes de pago');
   const data = parse(collectSchema, req.body);
   const outstanding = inv.total_cents - inv.paid_cents;
   if (data.amount_cents > outstanding) throw badRequest(`El importe supera lo pendiente (${money(outstanding)})`, { amount_cents: 'Supera el importe pendiente' });
-  tx(() => {
-    insert('payments', {
+  await (tx(async () => {
+    await (insert('payments', {
       client_id: inv.client_id,
       project_id: inv.project_id,
       invoice_id: inv.id,
@@ -285,11 +286,11 @@ router.post('/invoices/:id/payments', can('finance.write'), (req, res) => {
       notes: data.notes,
       is_demo: inv.is_demo,
       created_by: req.user.id,
-    });
-    recomputeInvoice(inv.id);
-    record(req, { action: 'payment.received', entityType: 'invoice', entityId: inv.id, clientId: inv.client_id, label: inv.number, summary: `Pago recibido: ${money(data.amount_cents)} · ${inv.number}`, data: data });
-  });
-  res.status(201).json(loadInvoice(inv.id));
+    }));
+    await (recomputeInvoice(inv.id));
+    await (record(req, { action: 'payment.received', entityType: 'invoice', entityId: inv.id, clientId: inv.client_id, label: inv.number, summary: `Pago recibido: ${money(data.amount_cents)} · ${inv.number}`, data: data }));
+  }));
+  res.status(201).json(await (loadInvoice(inv.id)));
 });
 
 // ── Cobros ───────────────────────────────────────────────
@@ -318,7 +319,7 @@ const PAYMENT_FROM = `(SELECT p.*, c.name AS client_name, c.company AS client_co
   FROM payments p JOIN clients c ON c.id = p.client_id LEFT JOIN projects pr ON pr.id = p.project_id LEFT JOIN invoices i ON i.id = p.invoice_id
   LEFT JOIN recurring_payments rp ON rp.id = p.recurring_payment_id) x`;
 
-router.get('/payments', can('finance.read'), (req, res) => {
+router.get('/payments', can('finance.read'), async (req, res) => {
   const where = [];
   const params = [];
   const statuses = String(req.query.status ?? '').split(',').filter(Boolean);
@@ -333,7 +334,7 @@ router.get('/payments', can('finance.read'), (req, res) => {
   if (req.query.recurring_payment_id) where.push('x.recurring_payment_id = ?') && params.push(Number(req.query.recurring_payment_id));
   if (METHODS.includes(req.query.method)) where.push('x.method = ?') && params.push(req.query.method);
   res.json(
-    paginate(req.query, {
+    await (paginate(req.query, {
       from: PAYMENT_FROM,
       where,
       params,
@@ -341,21 +342,21 @@ router.get('/payments', can('finance.read'), (req, res) => {
       sortMap: { issued_on: 'x.issued_on', due_date: 'x.due_date', paid_at: 'x.paid_at', amount: 'x.amount_cents', client: 'x.client_name COLLATE NOCASE', status: 'x.status', created_at: 'x.created_at' },
       defaultSort: ['issued_on', 'desc'],
       tiebreak: 'x.id DESC',
-    }),
+    })),
   );
 });
 
-const loadPayment = (id) => db.get(`SELECT * FROM ${PAYMENT_FROM} WHERE x.id = ?`, [id]);
+const loadPayment = async (id) => await (db.get(`SELECT * FROM ${PAYMENT_FROM} WHERE x.id = ?`, [id]));
 
-router.post('/payments', can('finance.write'), (req, res) => {
+router.post('/payments', can('finance.write'), async (req, res) => {
   const data = parse(paymentSchema, req.body);
-  assertClient(data.client_id);
-  const id = tx(() => {
-    const row = { ...data, currency: getSetting('invoicing').currency, created_by: req.user.id };
+  await (assertClient(data.client_id));
+  const id = await (tx(async () => {
+    const row = { ...data, currency: await (await (getSetting('invoicing'))).currency, created_by: req.user.id };
     row.status = paymentStatus({ ...row, status: data.status ?? 'pending' }, today());
-    const newId = insert('payments', row);
-    const label = clientLabel(data.client_id);
-    record(req, {
+    const newId = await (insert('payments', row));
+    const label = await (clientLabel(data.client_id));
+    await (record(req, {
       action: data.amount_paid_cents > 0 ? 'payment.received' : 'payment.created',
       entityType: 'payment',
       entityId: newId,
@@ -363,14 +364,14 @@ router.post('/payments', can('finance.write'), (req, res) => {
       label: data.concept,
       summary: data.amount_paid_cents > 0 ? `Pago recibido: ${money(data.amount_paid_cents)} · ${label}` : `Cobro pendiente registrado: ${money(data.amount_cents)} · ${label}`,
       after: data,
-    });
+    }));
     return newId;
-  });
-  res.status(201).json(loadPayment(id));
+  }));
+  res.status(201).json(await (loadPayment(id)));
 });
 
-router.patch('/payments/:id', can('finance.write'), (req, res) => {
-  const before = findOr404('payments', req.params.id, { message: 'Cobro no encontrado' });
+router.patch('/payments/:id', can('finance.write'), async (req, res) => {
+  const before = await (findOr404('payments', req.params.id, { message: 'Cobro no encontrado' }));
   const data = parse(paymentSchema.innerType().partial(), req.body);
   if (before.invoice_id && ['amount_cents', 'amount_paid_cents', 'client_id'].some((k) => k in data)) {
     throw conflict('Este cobro pertenece a una factura: anúlalo y registra uno nuevo si el importe es incorrecto');
@@ -378,46 +379,46 @@ router.patch('/payments/:id', can('finance.write'), (req, res) => {
   const merged = { ...before, ...data };
   if (merged.amount_paid_cents > merged.amount_cents) throw badRequest('Lo cobrado no puede superar el importe', { amount_paid_cents: 'Supera el importe' });
   if (merged.amount_paid_cents > 0 && !merged.paid_at) throw badRequest('Indica la fecha de cobro', { paid_at: 'Obligatorio' });
-  tx(() => {
+  await (tx(async () => {
     const status = paymentStatus({ ...merged, status: data.status ?? (['cancelled', 'refunded'].includes(before.status) && !('status' in data) ? before.status : 'pending') }, today());
-    update('payments', before.id, { ...data, status });
-    if (before.invoice_id) recomputeInvoice(before.invoice_id);
+    await (update('payments', before.id, { ...data, status }));
+    if (before.invoice_id) await (recomputeInvoice(before.invoice_id));
     const statusChanged = status !== before.status;
-    record(req, {
+    await (record(req, {
       action: statusChanged ? `payment.${status}` : 'payment.updated',
       entityType: 'payment',
       entityId: before.id,
       clientId: before.client_id,
       label: before.concept,
-      summary: statusChanged && status === 'paid' ? `Pago recibido: ${money(merged.amount_paid_cents)} · ${clientLabel(before.client_id)}` : `Cobro actualizado: ${before.concept}`,
+      summary: statusChanged && status === 'paid' ? `Pago recibido: ${money(merged.amount_paid_cents)} · ${await (clientLabel(before.client_id))}` : `Cobro actualizado: ${before.concept}`,
       before,
       after: { ...data, status },
-    });
-  });
-  res.json(loadPayment(before.id));
+    }));
+  }));
+  res.json(await (loadPayment(before.id)));
 });
 
-router.post('/payments/:id/collect', can('finance.write'), (req, res) => {
-  const p = findOr404('payments', req.params.id, { message: 'Cobro no encontrado' });
+router.post('/payments/:id/collect', can('finance.write'), async (req, res) => {
+  const p = await (findOr404('payments', req.params.id, { message: 'Cobro no encontrado' }));
   if (!['pending', 'partially_paid', 'overdue'].includes(p.status)) throw conflict('Este cobro no está pendiente');
   const data = parse(collectSchema, req.body);
   const remaining = p.amount_cents - p.amount_paid_cents;
   if (data.amount_cents > remaining) throw badRequest(`El importe supera lo pendiente (${money(remaining)})`, { amount_cents: 'Supera lo pendiente' });
-  tx(() => {
+  await (tx(async () => {
     const paid = p.amount_paid_cents + data.amount_cents;
     const status = paymentStatus({ ...p, amount_paid_cents: paid, status: 'pending' }, today());
-    update('payments', p.id, {
+    await (update('payments', p.id, {
       amount_paid_cents: paid,
       paid_at: data.paid_at,
       method: data.method,
       external_ref: data.external_ref ?? p.external_ref,
       notes: data.notes ? [p.notes, data.notes].filter(Boolean).join('\n') : undefined,
       status,
-    });
-    if (p.invoice_id) recomputeInvoice(p.invoice_id);
-    record(req, { action: 'payment.received', entityType: 'payment', entityId: p.id, clientId: p.client_id, label: p.concept, summary: `Pago recibido: ${money(data.amount_cents)} · ${clientLabel(p.client_id)}`, data });
-  });
-  res.json(loadPayment(p.id));
+    }));
+    if (p.invoice_id) await (recomputeInvoice(p.invoice_id));
+    await (record(req, { action: 'payment.received', entityType: 'payment', entityId: p.id, clientId: p.client_id, label: p.concept, summary: `Pago recibido: ${money(data.amount_cents)} · ${await (clientLabel(p.client_id))}`, data }));
+  }));
+  res.json(await (loadPayment(p.id)));
 });
 
 // ── Pagos recurrentes ────────────────────────────────────
@@ -448,53 +449,53 @@ const RECURRING_SELECT = `SELECT r.*, c.name AS client_name, c.company AS client
   (SELECT MAX(x.paid_at) FROM payments x WHERE x.recurring_payment_id = r.id AND x.amount_paid_cents > 0) AS last_paid_at
   FROM recurring_payments r JOIN clients c ON c.id = r.client_id LEFT JOIN projects p ON p.id = r.project_id`;
 
-router.get('/recurring', can('finance.read'), (req, res) => {
+router.get('/recurring', can('finance.read'), async (req, res) => {
   const where = ['c.deleted_at IS NULL'];
   const params = [];
   if (req.query.client_id) where.push('r.client_id = ?') && params.push(Number(req.query.client_id));
   if (req.query.status) where.push('r.status = ?') && params.push(String(req.query.status));
-  res.json(db.all(`${RECURRING_SELECT} WHERE ${where.join(' AND ')} ORDER BY r.status = 'active' DESC, r.next_due_date`, params));
+  res.json(await (db.all(`${RECURRING_SELECT} WHERE ${where.join(' AND ')} ORDER BY r.status = 'active' DESC, r.next_due_date`, params)));
 });
 
-router.post('/recurring', can('finance.write'), (req, res) => {
+router.post('/recurring', can('finance.write'), async (req, res) => {
   const data = parse(recurringSchema, req.body);
   const first = parse(firstPaymentSchema, req.body);
-  assertClient(data.client_id);
+  await (assertClient(data.client_id));
   if (first.first_paid_at && !first.first_method) throw badRequest('Indica cómo se cobró la primera cuota', { first_method: 'Obligatorio' });
-  const id = tx(() => {
-    const currency = getSetting('invoicing').currency;
+  const id = await (tx(async () => {
+    const currency = await (await (getSetting('invoicing'))).currency;
     const nextDue = first.first_paid_at ? nextOccurrence(data.start_date, data.frequency) : data.next_due_date ?? data.start_date;
-    const newId = insert('recurring_payments', { ...data, next_due_date: nextDue, currency, created_by: req.user.id });
+    const newId = await (insert('recurring_payments', { ...data, next_due_date: nextDue, currency, created_by: req.user.id }));
     if (first.first_paid_at) {
-      insert('payments', {
+      await (insert('payments', {
         client_id: data.client_id, project_id: data.project_id, recurring_payment_id: newId, period_date: data.start_date, concept: data.concept,
         amount_cents: data.amount_cents, amount_paid_cents: data.amount_cents, currency, issued_on: data.start_date, due_date: data.start_date,
         paid_at: first.first_paid_at, method: first.first_method, status: 'paid', created_by: req.user.id,
-      });
-      record(req, { action: 'payment.received', entityType: 'recurring', entityId: newId, clientId: data.client_id, label: data.concept, summary: `Pago recibido: ${money(data.amount_cents)} · primera cuota de ${data.concept} · ${clientLabel(data.client_id)}` });
+      }));
+      await (record(req, { action: 'payment.received', entityType: 'recurring', entityId: newId, clientId: data.client_id, label: data.concept, summary: `Pago recibido: ${money(data.amount_cents)} · primera cuota de ${data.concept} · ${await (clientLabel(data.client_id))}` }));
     }
-    record(req, { action: 'recurring.created', entityType: 'recurring', entityId: newId, clientId: data.client_id, label: data.concept, summary: `Pago recurrente configurado: ${data.concept} (${money(data.amount_cents)})`, after: data });
+    await (record(req, { action: 'recurring.created', entityType: 'recurring', entityId: newId, clientId: data.client_id, label: data.concept, summary: `Pago recurrente configurado: ${data.concept} (${money(data.amount_cents)})`, after: data }));
     return newId;
-  });
-  res.status(201).json(db.get(`${RECURRING_SELECT} WHERE r.id = ?`, [id]));
+  }));
+  res.status(201).json(await (db.get(`${RECURRING_SELECT} WHERE r.id = ?`, [id])));
 });
 
-router.patch('/recurring/:id', can('finance.write'), (req, res) => {
-  const before = findOr404('recurring_payments', req.params.id, { message: 'Pago recurrente no encontrado' });
+router.patch('/recurring/:id', can('finance.write'), async (req, res) => {
+  const before = await (findOr404('recurring_payments', req.params.id, { message: 'Pago recurrente no encontrado' }));
   const data = parse(recurringSchema.partial(), req.body);
-  tx(() => {
-    update('recurring_payments', before.id, data);
-    record(req, { action: 'recurring.updated', entityType: 'recurring', entityId: before.id, clientId: before.client_id, label: before.concept, summary: `Pago recurrente actualizado: ${before.concept}`, before, after: data });
-  });
-  res.json(db.get(`${RECURRING_SELECT} WHERE r.id = ?`, [before.id]));
+  await (tx(async () => {
+    await (update('recurring_payments', before.id, data));
+    await (record(req, { action: 'recurring.updated', entityType: 'recurring', entityId: before.id, clientId: before.client_id, label: before.concept, summary: `Pago recurrente actualizado: ${before.concept}`, before, after: data }));
+  }));
+  res.json(await (db.get(`${RECURRING_SELECT} WHERE r.id = ?`, [before.id])));
 });
 
 /** Genera ya el cobro del siguiente periodo (aunque aún no haya vencido). */
-router.post('/recurring/:id/generate', can('finance.write'), (req, res) => {
-  const r = findOr404('recurring_payments', req.params.id, { message: 'Pago recurrente no encontrado' });
+router.post('/recurring/:id/generate', can('finance.write'), async (req, res) => {
+  const r = await (findOr404('recurring_payments', req.params.id, { message: 'Pago recurrente no encontrado' }));
   if (r.status !== 'active') throw conflict('El pago recurrente no está activo');
-  const created = generateRecurring(req, { id: r.id, force: true });
-  res.json({ created, recurring: db.get(`${RECURRING_SELECT} WHERE r.id = ?`, [r.id]) });
+  const created = await (generateRecurring(req, { id: r.id, force: true }));
+  res.json({ created, recurring: await (db.get(`${RECURRING_SELECT} WHERE r.id = ?`, [r.id])) });
 });
 
 // ── Gastos ───────────────────────────────────────────────
@@ -517,7 +518,7 @@ const EXPENSE_FROM = `(SELECT e.*, c.name AS client_name, p.name AS project_name
   FROM expenses e LEFT JOIN clients c ON c.id = e.client_id LEFT JOIN projects p ON p.id = e.project_id
   LEFT JOIN servers s ON s.id = e.server_id LEFT JOIN documents d ON d.id = e.document_id AND d.deleted_at IS NULL) x`;
 
-router.get('/expenses', can('finance.read'), (req, res) => {
+router.get('/expenses', can('finance.read'), async (req, res) => {
   const where = [];
   const params = [];
   if (EXPENSE_CATEGORIES.includes(req.query.category)) where.push('x.category = ?') && params.push(req.query.category);
@@ -526,7 +527,7 @@ router.get('/expenses', can('finance.read'), (req, res) => {
   if (req.query.from) where.push('x.date >= ?') && params.push(String(req.query.from));
   if (req.query.to) where.push('x.date <= ?') && params.push(String(req.query.to));
   res.json(
-    paginate(req.query, {
+    await (paginate(req.query, {
       from: EXPENSE_FROM,
       where,
       params,
@@ -534,44 +535,57 @@ router.get('/expenses', can('finance.read'), (req, res) => {
       sortMap: { date: 'x.date', amount: 'x.amount_cents', supplier: 'x.supplier COLLATE NOCASE', category: 'x.category' },
       defaultSort: ['date', 'desc'],
       tiebreak: 'x.id DESC',
-    }),
+    })),
   );
 });
 
 router.post('/expenses', can('finance.write'), upload.single('file'), async (req, res) => {
+  const directUpload = req.body?.upload ?? null;
   try {
-    const data = parse(expenseSchema, req.body);
-    const documentId = req.file
+    const { upload: _upload, ...expenseBody } = req.body ?? {};
+    const data = parse(expenseSchema, expenseBody);
+    const localDocumentId = req.file
       ? await storeUpload(req, req.file, { category: 'receipt', title: `Justificante · ${data.supplier} · ${data.concept}`, client_id: data.client_id, project_id: data.project_id, tags: ['gasto'] })
       : null;
-    const id = tx(() => {
-      const newId = insert('expenses', { ...data, document_id: documentId, currency: getSetting('invoicing').currency, created_by: req.user.id });
-      record(req, { action: 'expense.created', entityType: 'expense', entityId: newId, clientId: data.client_id, label: data.concept, summary: `Gasto registrado: ${money(data.amount_cents)} · ${data.supplier}`, after: data });
+    const id = await (tx(async () => {
+      const documentId = directUpload
+        ? await completeSupabaseUpload(req, {
+            ...directUpload,
+            category: 'receipt',
+            title: `Justificante · ${data.supplier} · ${data.concept}`,
+            client_id: data.client_id,
+            project_id: data.project_id,
+            tags: ['gasto'],
+          }, { transaction: false })
+        : localDocumentId;
+      const newId = await (insert('expenses', { ...data, document_id: documentId, currency: await (getSetting('invoicing')).currency, created_by: req.user.id }));
+      await (record(req, { action: 'expense.created', entityType: 'expense', entityId: newId, clientId: data.client_id, label: data.concept, summary: `Gasto registrado: ${money(data.amount_cents)} · ${data.supplier}`, after: data }));
       return newId;
-    });
-    res.status(201).json(db.get(`SELECT * FROM ${EXPENSE_FROM} WHERE x.id = ?`, [id]));
+    }));
+    res.status(201).json(await (db.get(`SELECT * FROM ${EXPENSE_FROM} WHERE x.id = ?`, [id])));
   } catch (err) {
-    if (req.file && !db.value('SELECT 1 FROM documents WHERE storage_key = ?', [req.file.filename])) fs.rm(req.file.path, { force: true }, () => {});
+    if (directUpload?.storage_key && !await db.value('SELECT 1 FROM documents WHERE storage_key = ?', [directUpload.storage_key])) await removeObject(directUpload.storage_key).catch(() => {});
+    if (req.file && !await (db.value('SELECT 1 FROM documents WHERE storage_key = ?', [req.file.filename]))) fs.rm(req.file.path, { force: true }, () => {});
     throw err;
   }
 });
 
-router.patch('/expenses/:id', can('finance.write'), (req, res) => {
-  const before = findOr404('expenses', req.params.id, { message: 'Gasto no encontrado' });
+router.patch('/expenses/:id', can('finance.write'), async (req, res) => {
+  const before = await (findOr404('expenses', req.params.id, { message: 'Gasto no encontrado' }));
   const data = parse(expenseSchema.partial(), req.body);
-  tx(() => {
-    update('expenses', before.id, data);
-    record(req, { action: 'expense.updated', entityType: 'expense', entityId: before.id, clientId: before.client_id, label: before.concept, summary: `Gasto actualizado: ${before.concept}`, before, after: data });
-  });
-  res.json(db.get(`SELECT * FROM ${EXPENSE_FROM} WHERE x.id = ?`, [before.id]));
+  await (tx(async () => {
+    await (update('expenses', before.id, data));
+    await (record(req, { action: 'expense.updated', entityType: 'expense', entityId: before.id, clientId: before.client_id, label: before.concept, summary: `Gasto actualizado: ${before.concept}`, before, after: data }));
+  }));
+  res.json(await (db.get(`SELECT * FROM ${EXPENSE_FROM} WHERE x.id = ?`, [before.id])));
 });
 
-router.delete('/expenses/:id', can('finance.write'), (req, res) => {
-  const e = findOr404('expenses', req.params.id, { message: 'Gasto no encontrado' });
-  tx(() => {
-    db.run('DELETE FROM expenses WHERE id = ?', [e.id]);
-    record(req, { action: 'expense.deleted', entityType: 'expense', entityId: e.id, clientId: e.client_id, label: e.concept, summary: `Gasto eliminado: ${money(e.amount_cents)} · ${e.supplier}`, before: e });
-  });
+router.delete('/expenses/:id', can('finance.write'), async (req, res) => {
+  const e = await (findOr404('expenses', req.params.id, { message: 'Gasto no encontrado' }));
+  await (tx(async () => {
+    await (db.run('DELETE FROM expenses WHERE id = ?', [e.id]));
+    await (record(req, { action: 'expense.deleted', entityType: 'expense', entityId: e.id, clientId: e.client_id, label: e.concept, summary: `Gasto eliminado: ${money(e.amount_cents)} · ${e.supplier}`, before: e }));
+  }));
   res.json({ ok: true });
 });
 

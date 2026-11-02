@@ -21,27 +21,27 @@ export const sqlOutstanding = (col, by = 'client_id') => `(
   + (SELECT COALESCE(SUM(p.amount_cents - p.amount_paid_cents), 0) FROM payments p WHERE p.${by} = ${col} AND p.invoice_id IS NULL AND p.status IN ${OPEN_PAYMENT}))`;
 
 /** Recalcula lo cobrado y el estado de una factura a partir de sus cobros. */
-export function recomputeInvoice(invoiceId) {
-  const inv = db.get('SELECT * FROM invoices WHERE id = ?', [invoiceId]);
+export async function recomputeInvoice(invoiceId) {
+  const inv = await (db.get('SELECT * FROM invoices WHERE id = ?', [invoiceId]));
   if (!inv || inv.status === 'draft') return inv;
-  const paid = db.value(`SELECT COALESCE(SUM(amount_paid_cents), 0) FROM payments WHERE invoice_id = ? AND status NOT IN ${LIVE_PAYMENT}`, [invoiceId]);
+  const paid = await (db.value(`SELECT COALESCE(SUM(amount_paid_cents), 0) FROM payments WHERE invoice_id = ? AND status NOT IN ${LIVE_PAYMENT}`, [invoiceId]));
   const status = invoiceStatus({ ...inv, paid_cents: paid }, today());
   if (paid !== inv.paid_cents || status !== inv.status) {
-    db.run('UPDATE invoices SET paid_cents = ?, status = ?, updated_at = ? WHERE id = ?', [paid, status, nowIso(), invoiceId]);
+    await (db.run('UPDATE invoices SET paid_cents = ?, status = ?, updated_at = ? WHERE id = ?', [paid, status, nowIso(), invoiceId]));
   }
   return { ...inv, paid_cents: paid, status };
 }
 
-export function refreshPaymentStatus(payment) {
+export async function refreshPaymentStatus(payment) {
   const status = paymentStatus(payment, today());
-  if (status !== payment.status) db.run('UPDATE payments SET status = ?, updated_at = ? WHERE id = ?', [status, nowIso(), payment.id]);
+  if (status !== payment.status) await (db.run('UPDATE payments SET status = ?, updated_at = ? WHERE id = ?', [status, nowIso(), payment.id]));
   return status;
 }
 
-export function financeTotals({ includeDemo = true } = {}) {
+export async function financeTotals({ includeDemo = true } = {}) {
   const demo = includeDemo ? '' : 'AND is_demo = 0';
   const yearStart = `${today().slice(0, 4)}-01-01`;
-  const invoices = db.get(
+  const invoices = await (db.get(
     `SELECT
        COALESCE(SUM(CASE WHEN status NOT IN ('draft', 'cancelled') THEN total_cents END), 0) AS billed,
        COALESCE(SUM(CASE WHEN status IN ${OPEN_INVOICE} THEN total_cents - paid_cents END), 0) AS outstanding,
@@ -49,8 +49,8 @@ export function financeTotals({ includeDemo = true } = {}) {
        COUNT(CASE WHEN status = 'overdue' THEN 1 END) AS overdue_count,
        COUNT(CASE WHEN status = 'draft' THEN 1 END) AS drafts
      FROM invoices WHERE 1 = 1 ${demo}`,
-  );
-  const payments = db.get(
+  ));
+  const payments = await (db.get(
     `SELECT
        COALESCE(SUM(CASE WHEN status NOT IN ${LIVE_PAYMENT} THEN amount_paid_cents END), 0) AS collected,
        COALESCE(SUM(CASE WHEN invoice_id IS NULL AND status NOT IN ${LIVE_PAYMENT} THEN amount_cents END), 0) AS billed_standalone,
@@ -58,10 +58,10 @@ export function financeTotals({ includeDemo = true } = {}) {
        COALESCE(SUM(CASE WHEN invoice_id IS NULL AND status = 'overdue' THEN amount_cents - amount_paid_cents END), 0) AS overdue,
        COUNT(CASE WHEN invoice_id IS NULL AND status = 'overdue' THEN 1 END) AS overdue_count
      FROM payments WHERE 1 = 1 ${demo}`,
-  );
-  const expensesYear = db.value(`SELECT COALESCE(SUM(amount_cents), 0) FROM expenses WHERE date >= ? ${demo}`, [yearStart]);
-  const collectedYear = db.value(`SELECT COALESCE(SUM(amount_paid_cents), 0) FROM payments WHERE paid_at >= ? AND status NOT IN ${LIVE_PAYMENT} ${demo}`, [yearStart]);
-  const recurring = db.all(`SELECT amount_cents, frequency FROM recurring_payments WHERE status = 'active' ${demo}`);
+  ));
+  const expensesYear = await (db.value(`SELECT COALESCE(SUM(amount_cents), 0) FROM expenses WHERE date >= ? ${demo}`, [yearStart]));
+  const collectedYear = await (db.value(`SELECT COALESCE(SUM(amount_paid_cents), 0) FROM payments WHERE paid_at >= ? AND status NOT IN ${LIVE_PAYMENT} ${demo}`, [yearStart]));
+  const recurring = await (db.all(`SELECT amount_cents, frequency FROM recurring_payments WHERE status = 'active' ${demo}`));
   const mrr = Math.round(recurring.reduce((s, r) => s + r.amount_cents * (MONTHLY_FACTOR[r.frequency] ?? 0), 0));
 
   return {
@@ -110,32 +110,32 @@ function buildBuckets(range) {
 }
 
 /** Serie temporal de cobrado, pendiente, facturado, gastos y beneficio. */
-export function financeSeries(range = '30d') {
+export async function financeSeries(range = '30d') {
   const { buckets, from, to, bucket } = buildBuckets(range);
   const series = buckets.map((b) => ({ ...b, collected: 0, pending: 0, billed: 0, expenses: 0, profit: 0 }));
   const find = (date) => (date ? series.find((b) => date >= b.start && date <= b.end) : null);
 
-  for (const p of db.all(`SELECT paid_at, amount_paid_cents FROM payments WHERE paid_at BETWEEN ? AND ? AND status NOT IN ${LIVE_PAYMENT}`, [from, to])) {
+  for (const p of await (db.all(`SELECT paid_at, amount_paid_cents FROM payments WHERE paid_at BETWEEN ? AND ? AND status NOT IN ${LIVE_PAYMENT}`, [from, to]))) {
     const b = find(p.paid_at);
     if (b) b.collected += p.amount_paid_cents;
   }
-  for (const i of db.all("SELECT issue_date, total_cents, paid_cents, status FROM invoices WHERE issue_date BETWEEN ? AND ? AND status NOT IN ('draft', 'cancelled')", [from, to])) {
+  for (const i of await (db.all("SELECT issue_date, total_cents, paid_cents, status FROM invoices WHERE issue_date BETWEEN ? AND ? AND status NOT IN ('draft', 'cancelled')", [from, to]))) {
     const b = find(i.issue_date);
     if (!b) continue;
     b.billed += i.total_cents;
     if (OPEN_INVOICE.includes(`'${i.status}'`)) b.pending += i.total_cents - i.paid_cents;
   }
-  for (const p of db.all(
+  for (const p of await (db.all(
     `SELECT COALESCE(due_date, issued_on) AS d, amount_cents, amount_paid_cents, status FROM payments
      WHERE invoice_id IS NULL AND COALESCE(due_date, issued_on) BETWEEN ? AND ? AND status NOT IN ${LIVE_PAYMENT}`,
     [from, to],
-  )) {
+  ))) {
     const b = find(p.d);
     if (!b) continue;
     b.billed += p.amount_cents;
     if (OPEN_PAYMENT.includes(`'${p.status}'`)) b.pending += p.amount_cents - p.amount_paid_cents;
   }
-  for (const e of db.all('SELECT date, amount_cents FROM expenses WHERE date BETWEEN ? AND ?', [from, to])) {
+  for (const e of await (db.all('SELECT date, amount_cents FROM expenses WHERE date BETWEEN ? AND ?', [from, to]))) {
     const b = find(e.date);
     if (b) b.expenses += e.amount_cents;
   }
