@@ -9,3 +9,5 @@ site/dist/
 .env.local
 site/.env*
 !site/.env.example
+
+.vercel
