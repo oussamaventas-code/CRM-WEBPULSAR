@@ -1,6 +1,6 @@
 # Despliegue en Vercel y Supabase
 
-El CRM y la web pública son dos proyectos separados en Vercel. El CRM guarda sus datos en Supabase PostgreSQL y los documentos en un bucket privado de Supabase Storage. La SQLite local se conserva como origen de la importación.
+El proyecto de Vercel despliega tres servicios desde este repositorio: la API del CRM, su interfaz privada y la web pública. La web pública atiende `/`, el CRM `/crm` y la API `/api`. El CRM guarda sus datos en Supabase PostgreSQL y los documentos en un bucket privado de Supabase Storage. La SQLite local se conserva como origen de la importación.
 
 ## 1. Preparar Supabase e importar los datos locales
 
@@ -22,16 +22,16 @@ El importador aplica las migraciones PostgreSQL, comprueba que las tablas de des
 
 Si quieres descartar la base de producción, vacía primero el bucket desde Supabase → Storage → `crm-documents` → **Empty bucket**. Luego ejecuta una vez [supabase_reset.sql](../server/migrations/postgres/supabase_reset.sql) y después vuelve a ejecutar [supabase_setup.sql](../server/migrations/postgres/supabase_setup.sql). Esto elimina las tablas del CRM en Supabase, pero conserva la SQLite local. No ejecutes el importador si quieres que el CRM arranque vacío.
 
-## 2. Proyecto Vercel del CRM
+## 2. Proyecto Vercel Services
 
-Importa el repositorio como un proyecto Vercel con **Root Directory `.`**. El `vercel.json` raíz define dos servicios en el mismo proyecto: `server` (Express, API) y `web` (Vite, interfaz CRM). Las rutas `/api/*` se envían a `server`; las demás llegan a `web`, que sirve `index.html` para las rutas de React. El servicio Express exporta la app desde `server/src/vercel.js` y no inicia el servidor local ni el planificador persistente.
+Importa el repositorio correcto como un proyecto Vercel con **Root Directory `.`** y **Framework Preset `Services`**. El `vercel.json` raíz define tres servicios: `server` (Express, API), `web` (Vite, CRM bajo `/crm`) y `site` (Vite, web pública en `/`). Las rutas `/api/*` llegan a `server`, `/crm/*` a `web` y el resto a `site`. El servicio Express exporta la app desde `server/src/vercel.js` y no inicia el servidor local ni el planificador persistente. La web y el CRM llaman a `/api` desde el navegador en el mismo dominio; por eso `VITE_CRM_API_URL` debe quedar sin definir. No hay llamadas entre servicios de servidor que requieran bindings.
 
 Configura estas variables en Vercel → Settings → Environment Variables para Production (y Preview solo si quieres una base de pruebas independiente):
 
 | Variable | Valor |
 |---|---|
 | `NODE_ENV` | `production` |
-| `APP_URL` | URL HTTPS final del CRM, por ejemplo `https://crm.webpulsar.es` |
+| `APP_URL` | URL HTTPS final del proyecto, por ejemplo `https://webpulsar-crm.vercel.app` |
 | `MASTER_KEY` | La clave maestra actual del `.env` local; debe ser la misma para descifrar las credenciales importadas |
 | `DATABASE_URL` | Connection string del pooler Supabase, modo Transaction y SSL |
 | `SUPABASE_URL` | URL del proyecto Supabase |
@@ -45,15 +45,15 @@ También configura las integraciones que uses (`TURNSTILE_SECRET_KEY`, `SMTP_*`,
 
 La carga de documentos usa URLs de subida firmadas: la función de Vercel autoriza la carga y el navegador envía el archivo directamente al bucket privado usando solo la clave pública/anon, sin exponer `service_role`. Permite el dominio final del CRM en la configuración CORS de Supabase Storage si has restringido los orígenes del proyecto.
 
-En Vercel → Settings → Domains añade el dominio del CRM y configura sus registros DNS. Después despliega. Comprueba `https://<dominio-del-crm>/api/healthz` y entra al CRM para confirmar el acceso y los datos importados.
+En Vercel → Settings → Domains añade el dominio final y configura sus registros DNS. Después despliega. Comprueba `https://<dominio>/api/healthz`, visita `/` para la web pública y `/crm` para el CRM.
 
 ### Tareas programadas
 
 `vercel.json` registra monitorización cada minuto, automatizaciones cada 15 minutos, sincronizaciones cada hora y mantenimiento cada hora. Estos horarios requieren un plan Vercel que permita cron jobs con esa frecuencia (Pro); el plan Hobby no admite esas frecuencias. Vercel envía `CRON_SECRET` en el encabezado Bearer y el endpoint rechaza llamadas sin él.
 
-## 3. Proyecto Vercel de la web pública
+## 3. Desplegar solo la web pública por separado (opcional)
 
-Crea otro proyecto Vercel desde el mismo repositorio y pon **Root Directory `site`**. `site/vercel.json` construye esa aplicación estática de Vite. Configura:
+Si se quiere mantener la web pública en otro proyecto, importa el mismo repositorio y pon **Root Directory `site`**. `site/vercel.json` construye esa aplicación estática de Vite. En este caso configura `VITE_CRM_API_URL` con el dominio del CRM. Para el proyecto combinado de Services, deja `VITE_CRM_API_URL` sin definir para que el navegador use `/api` en el mismo origen. Otras variables del proyecto separado:
 
 | Variable | Valor |
 |---|---|

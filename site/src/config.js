@@ -2,7 +2,8 @@
 const env = import.meta.env;
 
 export const config = {
-  // Vacío en desarrollo: Vite redirige /api al CRM local (ver vite.config.js).
+  // Vacío para usar /api en el mismo dominio (Vercel Services y desarrollo local).
+  // Solo se define en despliegues separados del CRM.
   crmApiUrl: (env.VITE_CRM_API_URL ?? '').replace(/\/$/, ''),
   turnstileSiteKey: env.VITE_TURNSTILE_SITE_KEY || '',
   siteUrl: (env.VITE_SITE_URL || 'https://webpulsar.es').replace(/\/$/, ''),

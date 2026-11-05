@@ -11,10 +11,22 @@
         }
       }
     },
+    "site": {
+      "root": "site",
+      "framework": "vite",
+      "buildCommand": "npm run build",
+      "outputDirectory": "dist",
+      "rewrites": [
+        {
+          "source": "/(.*)",
+          "destination": "/index.html"
+        }
+      ]
+    },
     "web": {
       "root": "web",
       "framework": "vite",
-      "buildCommand": "npm run build",
+      "buildCommand": "npm run build -- --base=/crm/",
       "outputDirectory": "dist",
       "rewrites": [
         {
@@ -36,8 +48,20 @@
       "destination": { "service": "server" }
     },
     {
+      "source": "/crm",
+      "destination": { "service": "web", "path": "/index.html" }
+    },
+    {
+      "source": "/crm/",
+      "destination": { "service": "web", "path": "/index.html" }
+    },
+    {
+      "source": "/crm/:path*",
+      "destination": { "service": "web", "path": "/:path*" }
+    },
+    {
       "source": "/(.*)",
-      "destination": { "service": "web" }
+      "destination": { "service": "site" }
     }
   ]
 }

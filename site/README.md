@@ -1,6 +1,6 @@
 # Web pública de Web Pulsar (webpulsar.es)
 
-Web estática (React 19 + Vite + Tailwind 3.4.17 + GSAP). **No tiene backend propio**: el backend es el CRM de esta misma carpeta (`server/`, en `crm.webpulsar.es`), al que llama por HTTP. Proyecto independiente: tiene su propio `package.json` y no forma parte de los workspaces del CRM.
+Web estática (React 19 + Vite + Tailwind 3.4.17 + GSAP). **No tiene backend propio**: el backend del CRM (`server/`) atiende sus peticiones por `/api`. Tiene su propio `package.json` y no forma parte de los workspaces de npm del CRM.
 
 ## Desarrollo
 
@@ -32,7 +32,7 @@ Copia `.env.example` a `.env.production.local` antes de compilar:
 
 | Variable | Valor |
 |---|---|
-| `VITE_CRM_API_URL` | `https://crm.webpulsar.es` |
+| `VITE_CRM_API_URL` | Vacío en el despliegue combinado; usa `/api` en el mismo dominio. Solo define una URL absoluta si se despliega por separado. |
 | `VITE_TURNSTILE_SITE_KEY` | clave **pública** de Cloudflare Turnstile |
 | `VITE_SITE_URL` | `https://webpulsar.es` |
 | `VITE_CHECKOUT_ENABLED` | `false` hasta que el CRM tenga los endpoints de pago |
@@ -82,7 +82,7 @@ Claves en el `.env` del CRM, nunca en la web: `STRIPE_SECRET_KEY` y `STRIPE_WEBH
 
 ## Despliegue en Vercel
 
-La web pública se despliega como un proyecto Vercel separado del CRM. Selecciona esta carpeta como **Root Directory: `site`**, configura `VITE_CRM_API_URL`, `VITE_SITE_URL` y, si se usa, `VITE_TURNSTILE_SITE_KEY`. La configuración de SPA está en `site/vercel.json`. Sigue [la guía completa de Vercel y Supabase](../docs/VERCEL_SUPABASE.md) para preparar también el CRM, CORS y el formulario.
+El despliegue combinado usa el `vercel.json` raíz: la web pública se sirve en `/`, el CRM en `/crm` y la API en `/api`. Deja `VITE_CRM_API_URL` sin definir para que los formularios llamen al mismo origen. Para desplegar la web de forma independiente, selecciona esta carpeta como **Root Directory: `site`**, configura `VITE_CRM_API_URL`, `VITE_SITE_URL` y, si se usa, `VITE_TURNSTILE_SITE_KEY`. La configuración SPA independiente está en `site/vercel.json`. Sigue [la guía completa de Vercel y Supabase](../docs/VERCEL_SUPABASE.md).
 
 ## Despliegue en el VPS
 
